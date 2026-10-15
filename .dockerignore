@@ -1,0 +1,8 @@
+.git
+node_modules
+*.xlsx
+!test/fixtures/*.xlsx
+.env*
+deploy.sh
+README.md
+templates
