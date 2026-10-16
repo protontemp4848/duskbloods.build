@@ -86,3 +86,28 @@ if (currentTab) {
   const tabs = currentTab.parentElement;
   tabs.scrollLeft = currentTab.offsetLeft - tabs.offsetLeft - 16;
 }
+
+// "Report a problem": send without leaving the page (the form also works without JavaScript).
+for (const form of document.querySelectorAll('[data-report]')) {
+  const status = form.querySelector('[data-report-status]');
+  const button = form.querySelector('button');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    button.disabled = true;
+    status.classList.remove('report-status--error');
+    status.textContent = 'Sending…';
+    try {
+      const res = await fetch(form.action, { method: 'POST', body: new URLSearchParams(new FormData(form)), headers: { Accept: 'application/json' } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Sorry, that didn’t send. Please try again in a moment.');
+      status.textContent = 'Thanks, your report was sent.';
+      form.querySelector('textarea').value = '';
+    } catch (err) {
+      status.classList.add('report-status--error');
+      // A network failure surfaces as TypeError("Failed to fetch"); say something human instead.
+      status.textContent = err instanceof TypeError ? 'Couldn’t reach the site. Check your connection and try again.' : err.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+}

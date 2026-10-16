@@ -5,7 +5,8 @@
 #   CLOUD_RUN_NAME             Cloud Run service name
 #   CLOUD_RUN_SERVICE_ACCOUNT  JSON key of the deploy account (duskbloods-build-sa)
 # Optional repository variables: REGION (default europe-west1), SHEET_ID (default: the Duskbloods sheet),
-#   SITE_URL (public origin for canonical/sitemap URLs once there's a custom domain).
+#   SITE_URL (public origin for canonical/sitemap URLs once there's a custom domain),
+#   FEEDBACK_FORM_URL (Google Form pre-filled link that receives "Report a problem" submissions).
 # One-time GCP setup: DEPLOYER_SA=<deploy account email> ./deploy.sh setup
 name: CI
 
@@ -50,6 +51,7 @@ jobs:
       REGION: ${{ vars.REGION || 'europe-west1' }}
       SHEET_ID: ${{ vars.SHEET_ID }} # empty -> deploy.sh's built-in sheet id
       SITE_URL: ${{ vars.SITE_URL }} # e.g. https://duskbloods.build; empty -> canonical URLs use the request host
+      FEEDBACK_FORM_URL: ${{ vars.FEEDBACK_FORM_URL }} # Google Form pre-filled link; empty -> no "Report a problem" form
     steps:
       - uses: actions/checkout@v7
 

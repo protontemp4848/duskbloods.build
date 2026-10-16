@@ -135,9 +135,24 @@ Twitter cards, and JSON-LD (WebSite + VideoGame, BreadcrumbList, CollectionPage/
 Audit a running copy with the `seo-max` skill's crawler:
 `python3 -I ~/.claude/skills/seo-max/scripts/seo_audit.py http://localhost:8080 --fail-on warn`.
 
+## Problem reports
+
+Every page has a **Report a problem with this page** form. Submissions go to a Google Form, so they land as rows in
+its linked Google Sheet, with the page URL and entry name (e.g. `Items › Goldblood Stake`) filled in automatically.
+Visitors never leave the site, and it works with JavaScript off. It's anonymous, with a hidden spam trap and a limit
+of 5 reports per visitor per 10 minutes.
+
+Setup (once):
+1. Create a Google Form with three **short answer / paragraph** questions: `Page`, `Entry`, `What's wrong?`.
+   In Settings, make sure it does **not** require sign-in or collect email addresses.
+2. Responses → **Link to Sheets** (and, if you like, ⋮ → *Get email notifications for new responses*).
+3. ⋮ → **Get pre-filled link**. Type `PAGE`, `ENTRY` and `MESSAGE` into the three questions, then *Get link* → *Copy link*.
+4. Set that link as the `FEEDBACK_FORM_URL` GitHub repository **variable** (not a secret; the form is public), or
+   as an env var for `./deploy.sh deploy`. Without it, the form is hidden.
+
 ## Endpoints
 
-`/` home · `/compendium` · `/c/:category` · `/c/:category/:entry` · `/updates` · `/updates/:post` · `/search?q=` ·
+`POST /report` problem reports · `/` home · `/compendium` · `/c/:category` · `/c/:category/:entry` · `/updates` · `/updates/:post` · `/search?q=` ·
 `/api/content` (everything as JSON) · `/health` (last refresh time and error, if any)
 
 If a sheet refresh fails, the last good copy keeps being served and the error is reported on `/health` and in the logs.

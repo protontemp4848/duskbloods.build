@@ -16,6 +16,7 @@
 #   SERVICE     (default: duskbloods)                REPO     (default: duskbloods)
 #   SHEET_ID    (default: the Duskbloods sheet)      CACHE_SECONDS (default: 60)
 #   SITE_URL    public origin for canonical/sitemap URLs, e.g. https://duskbloods.build (default: the request host)
+#   FEEDBACK_FORM_URL  Google Form pre-filled link for "Report a problem" (unset: the form is hidden)
 #   PORT        local port for `local` (default: 8080)
 #   RUNTIME_SA  account the service runs as (default: duskbloods-runtime@PROJECT_ID, which has no roles)
 #   DEPLOYER_SA account CI deploys as, for `setup` to grant roles to (e.g. duskbloods-build-sa@PROJECT_ID)
@@ -173,7 +174,7 @@ cmd_deploy() {
     --port 8080 \
     --cpu 1 --memory 256Mi \
     --min-instances 0 --max-instances 3 \
-    --set-env-vars "SHEET_ID=${SHEET_ID},CACHE_SECONDS=${CACHE_SECONDS},SITE_URL=${SITE_URL:-}"
+    --set-env-vars "^@^SHEET_ID=${SHEET_ID}@CACHE_SECONDS=${CACHE_SECONDS}@SITE_URL=${SITE_URL:-}@FEEDBACK_FORM_URL=${FEEDBACK_FORM_URL:-}"
   [[ "${DRY_RUN:-}" == 1 ]] || log "Live at: $(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')"
 }
 
@@ -186,5 +187,5 @@ case "${1:-}" in
   push) cmd_push ;;
   deploy) cmd_deploy ;;
   all) cmd_smoke && cmd_push && cmd_deploy ;;
-  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

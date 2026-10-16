@@ -122,7 +122,7 @@ ${seo.jsonLdTag([...seo.siteGraph(content), ...(meta.jsonld ?? [])])}
     </form>
   </div>
 </header>
-<main class="wrap">${body}</main>
+<main class="wrap">${body}${reportBox(content, meta.reportLabel ?? meta.title)}</main>
 <footer class="foot">
   <div class="wrap foot-inner">
     <p>Unofficial fan site. Not affiliated with FromSoftware or Nintendo.${site.discord_url ? ` <a href="${esc(site.discord_url)}" rel="noopener">Discord</a>` : ''}</p>
@@ -132,6 +132,29 @@ ${seo.jsonLdTag([...seo.siteGraph(content), ...(meta.jsonld ?? [])])}
 <script src="${asset('app.js')}" defer></script>
 </body>
 </html>`;
+}
+
+// "Report a problem" on every page; posts to /report, which forwards to the maintainers' Google Form.
+function reportBox(content, label) {
+  const r = content.report;
+  if (!r) return '';
+  const status = { sent: 'Thanks, your report was sent.', failed: 'Sorry, that didn’t send. Please try again in a moment.' }[r.state] ?? '';
+  return `
+<details class="report" id="report"${r.state ? ' open' : ''}>
+  <summary>Report a problem with this page</summary>
+  <form method="post" action="/report" data-report>
+    <input type="hidden" name="page" value="${esc(r.path)}">
+    <input type="hidden" name="entry" value="${esc(label)}">
+    <label for="report-message">What’s wrong? <span class="muted">A typo, a wrong stat, something missing, a broken image…</span></label>
+    <textarea id="report-message" name="message" rows="3" minlength="5" maxlength="2000" required></textarea>
+    <div class="report-trap" aria-hidden="true"><label>Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label></div>
+    <div class="report-actions">
+      <button type="submit">Send report</button>
+      <p class="report-note">Anonymous. Goes straight to the people who edit this site.</p>
+    </div>
+    <p class="report-status${r.state === 'failed' ? ' report-status--error' : ''}" role="status" aria-live="polite" data-report-status>${status}</p>
+  </form>
+</details>`;
 }
 
 const empty = (message) => `<p class="empty">${esc(message)}</p>`;
@@ -194,6 +217,7 @@ ${roster ? `<section class="home-roster">
   const meta = {
     title: seo.fullTitle(`${site.game} Wiki: ${sections.length ? `${sections.join(', ')} & More` : 'Compendium'}`, site),
     ogTitle: `${site.title}: ${site.game} compendium`,
+    reportLabel: 'Home',
     description: seo.describeHome(content),
     path: '/',
     lcpImage: seo.absUrl(content.origin, roster?.items.find((i) => i.image)?.image),
@@ -328,6 +352,7 @@ ${view}
   const { site, origin } = content;
   const path = `/c/${category.slug}`;
   const meta = {
+    reportLabel: category.name,
     lcpImage: category.view === 'grid' ? seo.absUrl(origin, category.items.find((i) => i.image)?.image) : undefined,
     title: seo.fullTitle(category.items.length > 1 ? `All ${category.items.length} ${category.name} in ${site.game}` : `${category.name} in ${site.game}`, site),
     description: seo.describeCategory(category, site),
@@ -387,6 +412,7 @@ export function itemPage(content, category, item) {
     // "Albert: Skills & Aspects | The Duskbloods | Duskbloods.build", dropping suffixes that don't fit.
     title: `${subject} | ${site.game}`.length <= 65 ? seo.fullTitle(`${subject} | ${site.game}`, site) : seo.fullTitle(subject, site),
     ogTitle: `${item.title} · ${category.name}`,
+    reportLabel: `${category.name} › ${item.title}`,
     description,
     path,
     image: seo.absUrl(origin, item.image),
@@ -430,6 +456,7 @@ export function postPage(content, post) {
   const description = seo.clip(!seo.isPlaceholder(post.summary) ? post.summary : post.body || post.title);
   const meta = {
     title: seo.fullTitle(post.title, site), description, path, type: 'article', published: date,
+    reportLabel: `Updates › ${post.title}`,
     image: seo.absUrl(origin, post.image) || undefined,
     jsonld: [
       seo.breadcrumbs(origin, [['Updates', '/updates'], [post.title]]),

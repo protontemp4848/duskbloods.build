@@ -235,6 +235,28 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 .entry-section > h2.with-badge { display: flex; }
 .tabs a.with-badge { display: inline-flex; }
 
+/* Report a problem */
+.report { margin-top: 72px; border-top: 1px solid var(--line); padding-top: 14px; max-width: 680px; }
+.report summary { cursor: pointer; color: var(--muted); font-size: 13px; width: max-content; list-style: none; }
+.report summary::-webkit-details-marker { display: none; }
+.report summary::before { content: '⚑ '; color: var(--accent-text); }
+.report summary:hover { color: var(--text); }
+.report form { display: grid; gap: 10px; margin-top: 14px; }
+.report label { font-size: 14px; }
+.report label .muted { display: block; font-size: 13px; margin-top: 2px; }
+.report textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 2px; padding: 10px; resize: vertical; min-height: 84px; }
+.report textarea:focus { outline: none; border-color: var(--line-strong); }
+.report-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.report button { font: 500 14px var(--sans); color: #fff; background: var(--accent); border: 0; border-radius: 2px; padding: 9px 16px; cursor: pointer; }
+.report button:hover { filter: brightness(1.15); }
+.report button:disabled { opacity: .6; cursor: progress; }
+.report-note { font-size: 12.5px; color: var(--muted); }
+.report-status { font-size: 14px; color: var(--accent-text); min-height: 1em; }
+.report-status:empty { display: none; }
+.report-status--error { color: #e8a33d; }
+/* Honeypot: invisible to people, irresistible to form-filling bots */
+.report-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
 /* Footer */
 .foot { border-top: 1px solid var(--line); padding-block: 20px; font-size: 13px; color: var(--faint); }
 .foot-inner { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }

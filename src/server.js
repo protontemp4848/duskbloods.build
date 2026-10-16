@@ -6,6 +6,7 @@ import { createSource } from './sheet.js';
 import * as render from './render.js';
 import { assetHash } from './assets.js';
 import { originFor, sitemapXml, robotsTxt } from './seo.js';
+import { parseFormUrl, createReporter, isSitePath } from './feedback.js';
 
 const STATIC_DIR = new URL('../public/', import.meta.url);
 const STATIC_TYPES = {
@@ -36,6 +37,7 @@ const SECURITY_HEADERS = {
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
+    "form-action 'self'",
   ].join('; '),
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
@@ -82,7 +84,25 @@ export function search(content, q) {
   }).slice(0, 100);
 }
 
-export function createApp(source) {
+// Reads an application/x-www-form-urlencoded body, refusing anything over `max` bytes with a 413. The body is
+// drained rather than the socket destroyed, so the client actually receives the 413.
+function readForm(req, max = 8192) {
+  const tooLarge = () => Object.assign(new Error('too large'), { status: 413 });
+  if (Number(req.headers['content-length'] ?? 0) > max) return Promise.reject(tooLarge());
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size <= max) chunks.push(c);
+    });
+    req.on('end', () => (size > max ? reject(tooLarge()) : resolve(new URLSearchParams(Buffer.concat(chunks).toString('utf8')))));
+    req.on('error', reject);
+  });
+}
+
+// report: the problem-report submitter from feedback.js, or null when FEEDBACK_FORM_URL isn't set (form hidden).
+export function createApp(source, { report = null } = {}) {
   return async function handler(req, res) {
     const accepts = String(req.headers['accept-encoding'] ?? '');
     const encoding = /\bbr\b/.test(accepts) ? 'br' : /\bgzip\b/.test(accepts) ? 'gzip' : '';
@@ -105,9 +125,28 @@ export function createApp(source) {
       res.end(req.method === 'HEAD' ? undefined : out);
     };
 
+    const url = new URL(req.url, 'http://localhost');
+
+    // "Report a problem" form: JSON for the in-page script, a redirect back to the page without JavaScript.
+    if (url.pathname === '/report' && req.method === 'POST') {
+      let form;
+      try { form = await readForm(req); } catch (err) {
+        return send(err.status ?? 400, err.status === 413 ? 'Report too large' : 'Bad request', 'text/plain', { Connection: 'close' });
+      }
+      const ip = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket.remoteAddress || '';
+      const page = form.get('page') ?? '';
+      const result = report
+        ? await report({ ip, page, entry: form.get('entry') ?? '', message: form.get('message') ?? '', trap: form.get('website') ?? '' })
+        : { status: 404, error: 'Reporting is not configured.' };
+      if (String(req.headers.accept ?? '').includes('application/json')) {
+        return send(result.status, JSON.stringify({ ok: result.status === 200, error: result.error }), 'application/json', { 'Cache-Control': 'no-store' });
+      }
+      const back = isSitePath(page) ? page : '/';
+      return send(303, '', 'text/plain', { Location: `${back}${back.includes('?') ? '&' : '?'}reported=${result.status === 200 ? 'sent' : 'failed'}#report`, 'Cache-Control': 'no-store' });
+    }
+
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(405, 'Method not allowed', 'text/plain', { Allow: 'GET, HEAD' });
 
-    const url = new URL(req.url, 'http://localhost');
     const parts = url.pathname.split('/').filter(Boolean).map((p) => { try { return decodeURIComponent(p); } catch { return p; } });
 
     try {
@@ -136,7 +175,13 @@ export function createApp(source) {
 
       const raw = await source.get();
       // Per-request view: same content plus the public origin for canonical/og/sitemap URLs.
-      const content = { ...raw, origin: originFor(req) };
+      const reported = url.searchParams.get('reported');
+      const content = {
+        ...raw,
+        origin: originFor(req),
+        // Problem-report form: which page it's on, and the result after a no-JavaScript submit.
+        report: report ? { path: url.pathname, state: ['sent', 'failed'].includes(reported) ? reported : '' } : null,
+      };
       // Pictures placed in the sheet, by content hash, so they never change in place.
       const mediaKey = /^\/media\/([0-9a-f]{16}\.(?:png|jpg|gif|webp))$/.exec(url.pathname)?.[1];
       if (mediaKey) {
@@ -182,7 +227,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     file: process.env.SHEET_FILE,
     ttlMs: Number(process.env.CACHE_SECONDS ?? 60) * 1000,
   });
-  const server = createServer(createApp(source));
+  const form = parseFormUrl(process.env.FEEDBACK_FORM_URL);
+  if (process.env.FEEDBACK_FORM_URL && !form) {
+    console.error(JSON.stringify({ severity: 'WARNING', message: 'FEEDBACK_FORM_URL is not a pre-filled Google Form link with PAGE, ENTRY and MESSAGE; problem reports are disabled' }));
+  }
+  const server = createServer(createApp(source, { report: form ? createReporter(form) : null }));
   server.listen(port, () => console.log(JSON.stringify({ severity: 'INFO', message: `Listening on :${port}` })));
   // Warm the cache so the first visitor doesn't wait on Google.
   source.get().catch(() => {});
