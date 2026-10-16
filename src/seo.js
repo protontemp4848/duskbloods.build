@@ -141,6 +141,9 @@ export function jsonLdTag(nodes) {
 
 /* ---------- sitemap.xml / robots.txt ---------- */
 
+// Sheet-placed pictures are served from this site (/media/...); everything public needs absolute URLs.
+export const absUrl = (origin, url) => (url && url.startsWith('/') ? `${origin}${url}` : url);
+
 const xmlEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
 
 /** Every indexable canonical page. lastmod only where the sheet has a real date (posts). */
@@ -154,7 +157,7 @@ export function sitemapXml(content) {
   }
   for (const post of content.news) urls.push({ path: `/updates/${post.slug}`, lastmod: /^\d{4}-\d{2}-\d{2}$/.test(post.date) ? post.date : '', image: post.image, imageTitle: post.title });
   const body = urls.map((u) => `  <url><loc>${xmlEsc(origin + u.path)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}${
-    u.image ? `<image:image><image:loc>${xmlEsc(u.image)}</image:loc></image:image>` : ''}</url>`).join('\n');
+    u.image ? `<image:image><image:loc>${xmlEsc(absUrl(origin, u.image))}</image:loc></image:image>` : ''}</url>`).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 ${body}

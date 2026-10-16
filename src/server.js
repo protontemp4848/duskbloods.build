@@ -137,6 +137,12 @@ export function createApp(source) {
       const raw = await source.get();
       // Per-request view: same content plus the public origin for canonical/og/sitemap URLs.
       const content = { ...raw, origin: originFor(req) };
+      // Pictures placed in the sheet, by content hash, so they never change in place.
+      const mediaKey = /^\/media\/([0-9a-f]{16}\.(?:png|jpg|gif|webp))$/.exec(url.pathname)?.[1];
+      if (mediaKey) {
+        const file = raw.media?.get(mediaKey);
+        return file ? send(200, file.data, file.type, { 'Cache-Control': YEAR }) : send(404, 'Not found', 'text/plain');
+      }
       if (url.pathname === '/robots.txt') return send(200, robotsTxt(content.origin), 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
       if (url.pathname === '/sitemap.xml') return send(200, sitemapXml(content), 'application/xml; charset=utf-8', { 'Cache-Control': 'public, max-age=600' });
       const page = (html) => send(200, html, undefined, { 'Cache-Control': 'public, max-age=60' });

@@ -99,13 +99,13 @@ ${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
 <meta property="og:description" content="${esc(oneLine(meta.description))}">
 ${canonical ? `<meta property="og:url" content="${esc(canonical)}">` : ''}
 <meta property="og:image" content="${esc(image)}">
-${meta.image ? '' : '<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">'}
+${meta.image ? (meta.imageSize ? `<meta property="og:image:width" content="${meta.imageSize[0]}">\n<meta property="og:image:height" content="${meta.imageSize[1]}">` : '') : '<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">'}
 <meta property="og:image:alt" content="${esc(meta.imageAlt ?? `${site.title}: ${site.tagline}`)}">
 ${meta.published ? `<meta property="article:published_time" content="${esc(meta.published)}">` : ''}
 <meta name="twitter:card" content="${meta.card ?? 'summary_large_image'}">
 <meta name="theme-color" content="#0b0b0c">
 <link rel="preload" href="/static/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
-${meta.lcpImage ? `<link rel="preconnect" href="${esc(new URL(meta.lcpImage).origin)}">\n<link rel="preload" as="image" href="${esc(meta.lcpImage)}" fetchpriority="high">` : ''}
+${meta.lcpImage ? `${new URL(meta.lcpImage, origin || 'http://localhost').origin !== new URL(origin || 'http://localhost').origin ? `<link rel="preconnect" href="${esc(new URL(meta.lcpImage).origin)}">\n` : ''}<link rel="preload" as="image" href="${esc(meta.lcpImage)}" fetchpriority="high">` : ''}
 <link rel="stylesheet" href="${asset('style.css')}">
 <link rel="icon" href="${asset('favicon.svg')}" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
@@ -196,7 +196,7 @@ ${roster ? `<section class="home-roster">
     ogTitle: `${site.title}: ${site.game} compendium`,
     description: seo.describeHome(content),
     path: '/',
-    lcpImage: roster?.items.find((i) => i.image)?.image,
+    lcpImage: seo.absUrl(content.origin, roster?.items.find((i) => i.image)?.image),
   };
   return layout({ content, meta, body });
 }
@@ -223,11 +223,16 @@ ${categoryIndex(content.categories)}`;
 }
 
 // Character-select style: tall portraits, name, and the first two short stats.
+// width/height attributes: the real size when known (pictures placed in the sheet), else a fallback shape.
+const sizeAttrs = (item, fallback) => { const [w, h] = item.imageSize ?? fallback ?? []; return w ? `width="${w}" height="${h}"` : ''; };
+// Icons and other roughly square images are shown whole; tall portraits are cropped to the card.
+const isSquarish = (item) => Boolean(item.imageSize && item.imageSize[1] / item.imageSize[0] < 1.4);
+
 // eager: how many leading portraits are above the fold (loaded eagerly, the first with high priority, for LCP).
 function portraitGrid(category, items, { eager = 0 } = {}) {
   const loading = (i) => (i === 0 && eager ? ' fetchpriority="high"' : i < eager ? '' : ' loading="lazy"');
-  return `<div class="portraits">${items.map((item, i) => `<a class="portrait" href="${hrefOf(category, item)}" ${filterAttrs(item)}>
-  ${item.image ? `<img src="${esc(item.image)}" alt="" width="427" height="990" decoding="async"${loading(i)}>` : `<span class="portrait-blank" aria-hidden="true">${esc(item.title.slice(0, 1))}</span>`}
+  return `<div class="portraits">${items.map((item, i) => `<a class="portrait${isSquarish(item) ? ' portrait--square' : ''}" href="${hrefOf(category, item)}" ${filterAttrs(item)}>
+  ${item.image ? `<img src="${esc(item.image)}" alt="" ${sizeAttrs(item, [427, 990])} decoding="async"${loading(i)}>` : `<span class="portrait-blank" aria-hidden="true">${esc(item.title.slice(0, 1))}</span>`}
   <span class="portrait-text">
     <strong>${esc(item.title)}</strong>
     ${item.fields.length ? `<small>${esc(item.fields.slice(0, 2).map((f) => f.value).join(' · '))}</small>` : ''}
@@ -252,8 +257,9 @@ function groupedAbilities(content, item, opts) {
 
 // Stacked entries with everything visible: for prose and paired abilities.
 function entryList(content, category) {
-  return `<div class="list">${category.items.map((item) => `<article class="list-entry${item.image ? ' list-entry--image' : ''}" id="${esc(item.slug)}" ${filterAttrs(item)}>
-  ${item.image ? `<img class="list-thumb" src="${esc(item.image)}" alt="" loading="lazy">` : ''}
+  // The first few thumbnails are above the fold: load them eagerly.
+  return `<div class="list">${category.items.map((item, i) => `<article class="list-entry${item.image ? ' list-entry--image' : ''}" id="${esc(item.slug)}" ${filterAttrs(item)}>
+  ${item.image ? `<img class="list-thumb${isSquarish(item) ? ' list-thumb--square' : ''}" src="${esc(item.image)}" alt="" ${sizeAttrs(item)}${i < 3 ? '' : ' loading="lazy"'}>` : ''}
   <div class="list-main">
     <h2><a href="${hrefOf(category, item)}">${esc(item.title)}</a></h2>
     ${item.tags.length ? `<p class="entry-tags">${item.tags.map(esc).join(' · ')}</p>` : ''}
@@ -286,7 +292,7 @@ function entryTable(content, rows, category, { extraHead = '', extraCell = () =>
   const values = new Map(item.fields.map((f) => [f.label, f.value]));
   const abilities = new Map(item.abilities.map((a) => [a.label, a]));
   return `<tr ${filterAttrs(item, [cat ?? ''])}>
-  <td class="entry-name"><a href="${href}">${item.image ? `<img src="${esc(item.image)}" alt="" loading="lazy">` : ''}<span><strong>${esc(item.title)}</strong>${item.summary ? `<small>${esc(item.summary)}</small>` : ''}</span></a></td>
+  <td class="entry-name"><a href="${href}">${item.image ? `<img src="${esc(item.image)}" alt="" width="40" height="40" loading="lazy">` : ''}<span><strong>${esc(item.title)}</strong>${item.summary ? `<small>${esc(item.summary)}</small>` : ''}</span></a></td>
   ${extraCell({ item, category: cat })}
   ${cols.map((label, i) => `<td${numeric[i] ? ' class="num"' : ''}>${linked(content, values.get(label) ?? '', item)}</td>`).join('')}
   ${abilityCols.map((label) => { const a = abilities.get(label); return `<td class="ability-cell">${a ? `<strong>${esc(a.name)}</strong><small>${esc(a.text)}</small>` : ''}</td>`; }).join('')}
@@ -322,7 +328,7 @@ ${view}
   const { site, origin } = content;
   const path = `/c/${category.slug}`;
   const meta = {
-    lcpImage: category.view === 'grid' ? category.items.find((i) => i.image)?.image : undefined,
+    lcpImage: category.view === 'grid' ? seo.absUrl(origin, category.items.find((i) => i.image)?.image) : undefined,
     title: seo.fullTitle(category.items.length > 1 ? `All ${category.items.length} ${category.name} in ${site.game}` : `${category.name} in ${site.game}`, site),
     description: seo.describeCategory(category, site),
     path,
@@ -342,13 +348,13 @@ function entry(content, item, { crumbs, pager = '' }) {
   const related = alsoIn(content, item);
   return `
 <nav class="crumbs">${crumbs}</nav>
-<article class="entry${item.image ? ' entry--image' : ''}">
+<article class="entry${item.image ? ' entry--image' : ''}${isSquarish(item) ? ' entry--icon' : ''}">
   <header class="entry-head">
     ${item.date ? `<time class="mono" datetime="${esc(item.date)}">${esc(formatDate(item.date))}</time>` : ''}
     <h1>${esc(item.title)}</h1>
     ${item.tags.length ? `<p class="entry-tags">${item.tags.map(esc).join('<span aria-hidden="true"> · </span>')}</p>` : ''}
   </header>
-  ${item.image ? `<figure class="entry-figure"><img class="detail-img" src="${esc(item.image)}" alt="${esc(item.title)}" width="427" height="990" fetchpriority="high"></figure>` : ''}
+  ${item.image ? `<figure class="entry-figure"><img class="detail-img" src="${esc(item.image)}" alt="${esc(item.title)}" ${sizeAttrs(item, [427, 990])} fetchpriority="high"></figure>` : ''}
   <div class="entry-body">
     ${item.summary ? `<p class="flavor">${esc(item.summary)}</p>` : ''}
     ${item.fields.length ? `<dl class="stats">${item.fields.map((f) => `<div><dt>${esc(f.label)}</dt><dd${isNumeric(f.value) ? ' class="mono"' : ''}>${linked(content, f.value, item)}</dd></div>`).join('')}</dl>` : ''}
@@ -383,15 +389,16 @@ export function itemPage(content, category, item) {
     ogTitle: `${item.title} · ${category.name}`,
     description,
     path,
-    image: item.image,
-    lcpImage: item.image,
+    image: seo.absUrl(origin, item.image),
+    imageSize: item.imageSize,
+    lcpImage: seo.absUrl(origin, item.image),
     imageAlt: item.image ? item.title : undefined,
     card: item.image ? 'summary' : undefined, // portraits crop badly in large cards
     jsonld: [
       seo.breadcrumbs(origin, [['Compendium', '/compendium'], [category.name, `/c/${category.slug}`], [item.title]]),
       { '@type': 'ItemPage', '@id': `${origin}${path}#page`, url: `${origin}${path}`, name: item.title, description, isPartOf: { '@id': `${origin}/#website` },
-        about: { '@type': 'Thing', name: item.title, description, ...(item.image ? { image: item.image } : {}), subjectOf: { '@id': `${origin}/#game` } },
-        ...(item.image ? { primaryImageOfPage: { '@type': 'ImageObject', url: item.image } } : {}) },
+        about: { '@type': 'Thing', name: item.title, description, ...(item.image ? { image: seo.absUrl(origin, item.image) } : {}), subjectOf: { '@id': `${origin}/#game` } },
+        ...(item.image ? { primaryImageOfPage: { '@type': 'ImageObject', url: seo.absUrl(origin, item.image), ...(item.imageSize ? { width: item.imageSize[0], height: item.imageSize[1] } : {}) } } : {}) },
     ],
   };
   return layout({
@@ -423,11 +430,11 @@ export function postPage(content, post) {
   const description = seo.clip(!seo.isPlaceholder(post.summary) ? post.summary : post.body || post.title);
   const meta = {
     title: seo.fullTitle(post.title, site), description, path, type: 'article', published: date,
-    image: post.image || undefined,
+    image: seo.absUrl(origin, post.image) || undefined,
     jsonld: [
       seo.breadcrumbs(origin, [['Updates', '/updates'], [post.title]]),
       { '@type': 'BlogPosting', headline: post.title, description, url: `${origin}${path}`, mainEntityOfPage: `${origin}${path}`,
-        ...(date ? { datePublished: date, dateModified: date } : {}), image: [post.image || `${origin}${asset('og.png')}`],
+        ...(date ? { datePublished: date, dateModified: date } : {}), image: [seo.absUrl(origin, post.image) || `${origin}${asset('og.png')}`],
         author: { '@type': 'Organization', name: site.title, url: `${origin}/` }, publisher: { '@type': 'Organization', name: site.title, url: `${origin}/` } },
     ],
   };

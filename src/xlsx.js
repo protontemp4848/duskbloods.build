@@ -127,7 +127,78 @@ function readSheetRows(xml, shared, dateStyles) {
   return Array.from(rows, (r) => r ?? []);
 }
 
-/** Parses an .xlsx buffer into [{ name, hidden, rows: string[][] }] in tab order. */
+// "../drawings/drawing3.xml" relative to "xl/worksheets/sheet3.xml" -> "xl/drawings/drawing3.xml"
+function resolvePart(from, target) {
+  if (target.startsWith('/')) return target.slice(1);
+  const parts = from.split('/').slice(0, -1);
+  for (const seg of target.split('/')) {
+    if (seg === '..') parts.pop();
+    else if (seg && seg !== '.') parts.push(seg);
+  }
+  return parts.join('/');
+}
+
+function readRels(files, part) {
+  const relsPath = part.replace(/([^/]+)$/, '_rels/$1.rels');
+  const rels = new Map();
+  for (const m of (files.get(relsPath)?.toString('utf8') ?? '').matchAll(/<Relationship\b([^>]*?)\/?>/g)) {
+    const a = attrs(m[1]);
+    if (a.TargetMode !== 'External') rels.set(a.Id, resolvePart(part, a.Target));
+  }
+  return rels;
+}
+
+const IMAGE_TYPES = [
+  [(b) => b[0] === 0x89 && b.toString('latin1', 1, 4) === 'PNG', 'png', 'image/png'],
+  [(b) => b[0] === 0xff && b[1] === 0xd8, 'jpg', 'image/jpeg'],
+  [(b) => b.toString('latin1', 0, 3) === 'GIF', 'gif', 'image/gif'],
+  [(b) => b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP', 'webp', 'image/webp'],
+];
+
+// Pixel size from the file header (PNG, JPEG, GIF, WebP); null if unknown.
+export function imageSize(b) {
+  try {
+    if (b[0] === 0x89) return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    if (b.toString('latin1', 0, 3) === 'GIF') return [b.readUInt16LE(6), b.readUInt16LE(8)];
+    if (b.toString('latin1', 8, 12) === 'WEBP') {
+      const kind = b.toString('latin1', 12, 16);
+      if (kind === 'VP8X') return [1 + b.readUIntLE(24, 3), 1 + b.readUIntLE(27, 3)];
+      if (kind === 'VP8L') { const n = b.readUInt32LE(21); return [1 + (n & 0x3fff), 1 + ((n >> 14) & 0x3fff)]; }
+      return [b.readUInt16LE(26) & 0x3fff, b.readUInt16LE(28) & 0x3fff];
+    }
+    for (let i = 2; i + 9 < b.length;) {
+      if (b[i] !== 0xff) return null;
+      const marker = b[i + 1];
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
+      i += 2 + b.readUInt16BE(i + 2);
+    }
+  } catch { /* truncated header */ }
+  return null;
+}
+
+/**
+ * Pictures placed on a sheet ("Insert image over/in cell" in Google Sheets export as drawing anchors):
+ * [{ row, col, data, ext, type, size }] with 0-based row/col of the anchor's top-left cell.
+ */
+function readSheetImages(files, sheetPart) {
+  const images = [];
+  for (const drawingPart of readRels(files, sheetPart).values()) {
+    if (!/\/drawings\/[^/]+\.xml$/.test(drawingPart)) continue;
+    const xml = files.get(drawingPart)?.toString('utf8') ?? '';
+    const media = readRels(files, drawingPart);
+    for (const m of xml.matchAll(/<xdr:(oneCellAnchor|twoCellAnchor)\b[^>]*>([\s\S]*?)<\/xdr:\1>/g)) {
+      const from = /<xdr:from>[\s\S]*?<xdr:col>(\d+)<\/xdr:col>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/.exec(m[2]);
+      const embed = /<a:blip\b[^>]*\br:embed="([^"]+)"/.exec(m[2]);
+      const data = embed && files.get(media.get(embed[1]));
+      const kind = data && IMAGE_TYPES.find(([test]) => test(data));
+      if (!from || !kind) continue;
+      images.push({ row: Number(from[2]), col: Number(from[1]), data, ext: kind[1], type: kind[2], size: imageSize(data) });
+    }
+  }
+  return images;
+}
+
+/** Parses an .xlsx buffer into [{ name, hidden, rows: string[][], images }] in tab order. */
 export function readWorkbook(buf) {
   const files = unzip(buf);
   const read = (path) => files.get(path)?.toString('utf8');
@@ -147,11 +218,13 @@ export function readWorkbook(buf) {
 
   return [...workbook.matchAll(/<sheet\b([^>]*?)\/?>/g)].map((m) => {
     const a = attrs(m[1]);
-    const xml = read(rels.get(a['r:id'])) ?? '';
+    const part = rels.get(a['r:id']);
+    const xml = read(part) ?? '';
     return {
       name: a.name,
       hidden: a.state === 'hidden' || a.state === 'veryHidden',
       rows: readSheetRows(xml, shared, dateStyles),
+      images: part ? readSheetImages(files, part) : [],
     };
   });
 }

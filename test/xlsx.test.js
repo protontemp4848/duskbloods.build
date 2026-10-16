@@ -6,7 +6,7 @@ import { makeXlsx } from './make-xlsx.js';
 
 test('reads the real (empty) Google Sheets export', () => {
   const tabs = readWorkbook(readFileSync(new URL('./fixtures/google-empty.xlsx', import.meta.url)));
-  assert.deepEqual(tabs, [{ name: 'Sheet1', hidden: false, rows: [] }]);
+  assert.deepEqual(tabs, [{ name: 'Sheet1', hidden: false, rows: [], images: [] }]);
 });
 
 test('reads strings, numbers, booleans, dates, sparse cells and hidden tabs', () => {

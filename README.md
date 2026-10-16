@@ -24,7 +24,7 @@ The first non-blank row of a tab is its header row. These column names have spec
 | Column | Use |
 | --- | --- |
 | `Name` / `Title` | Entry title (required; rows without one are skipped). Otherwise any `… Name` column (e.g. `Character Name`), else the first column |
-| `Image` / `Picture` / `Portrait` | Image URL (`http(s)` only; also any `… Picture`/`… Image` column, e.g. `Profile Picture`) |
+| `Image` / `Picture` / `Portrait` | An image URL (`http(s)`), **or a picture placed in the row's cell** (Insert → Image → image in cell / over cells). Placed pictures are served from the site at `/media/<hash>`. Also any `… Picture`/`… Image` column, e.g. `Profile Picture` |
 | `Summary` / `Description` | One line under the name in the table; italic flavour text on the entry page |
 | `Body` / `Details` | Long text on the detail page (blank lines become paragraphs) |
 | `Tags` / `Type` | Comma-separated values, shown as a column and a filter dropdown (labelled with your header) |

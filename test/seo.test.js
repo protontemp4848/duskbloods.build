@@ -191,3 +191,51 @@ test('helpers: placeholder detection, clipping, origin', () => {
   const item = content.categories.find((x) => x.name === 'Items').items.find((i) => i.title === 'Blood Boluses');
   assert.match(describeItem(item, content.categories[1], content.site), /^Boluses formed by blood\. Effect: Slowly heal HP over time/);
 });
+
+test('item pictures placed in the sheet are served from /media, cached for a year, and used everywhere', async () => {
+  const items = content.categories.find((c) => c.name === 'Items');
+  assert.equal(items.items.filter((i) => i.image).length, 20);
+  const stake = items.items.find((i) => i.title === 'Goldblood Stake');
+  assert.match(stake.image, /^\/media\/[0-9a-f]{16}\.jpg$/);
+  assert.deepEqual(stake.imageSize, [200, 187]);
+  assert.deepEqual(items.items.find((i) => i.title === 'Transmitter').imageSize, [314, 294], 'last row gets the last picture');
+
+  const img = await fetch(base + stake.image);
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get('content-type'), 'image/jpeg');
+  assert.equal(img.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  assert.equal(Buffer.from(await img.arrayBuffer())[0], 0xff, 'JPEG bytes');
+  assert.equal((await fetch(base + '/media/0000000000000000.jpg')).status, 404);
+  assert.equal((await fetch(base + '/media/../server.js')).status, 404);
+
+  const page = await get('/c/items/goldblood-stake');
+  assert.equal(meta(page.text, 'property', 'og:image'), `${ORIGIN}${stake.image}`);
+  assert.equal(meta(page.text, 'property', 'og:image:width'), '200');
+  assert.match(page.text, /<article class="entry entry--image entry--icon">/);
+  assert.match(page.text, /<img class="detail-img" src="\/media\/[0-9a-f]{16}\.jpg" alt="Goldblood Stake" width="200" height="187"/);
+  const ld = jsonLd(page.text)['@graph'].find((n) => n['@type'] === 'ItemPage');
+  assert.equal(ld.primaryImageOfPage.url, `${ORIGIN}${stake.image}`);
+  assert.match(page.text, new RegExp(`<link rel="preload" as="image" href="${ORIGIN}${stake.image}"`));
+  assert.doesNotMatch(page.text, /rel="preconnect" href="https:\/\/duskbloods\.example"/, 'no preconnect to our own origin');
+
+  const list = (await get('/c/items')).text;
+  const thumbs = [...list.matchAll(/<img class="list-thumb list-thumb--square" src="\/media\/[0-9a-f]{16}\.(?:jpg|png)" alt="" width="\d+" height="\d+"( loading="lazy")?>/g)];
+  assert.equal(thumbs.length, 20);
+  assert.deepEqual(thumbs.map((m) => Boolean(m[1])).slice(0, 4), [false, false, false, true], 'first three eager, the rest lazy');
+  assert.match((await get('/sitemap.xml')).text, /<loc>https:\/\/duskbloods\.example\/c\/items\/goldblood-stake<\/loc><image:image><image:loc>https:\/\/duskbloods\.example\/media\/[0-9a-f]{16}\.jpg<\/image:loc>/);
+  assert.doesNotMatch((await get('/api/content')).text, /"media"|"data":\{"type":"Buffer"/, 'image bytes stay out of the JSON API');
+});
+
+test('picture matching: image-column picture wins, any picture in the row is a fallback, a URL beats both', async () => {
+  const { tabToItems } = await import('../src/content.js');
+  const png = (n) => ({ data: Buffer.from(`\x89PNG${n}`, "latin1"), ext: 'png', type: 'image/png', size: [10, 10] });
+  const rows = [[], ['Name', 'Notes', 'Image'], ['A', '', ''], ['B', '', ''], ['C', '', 'https://x.test/c.png']];
+  const images = [{ row: 2, col: 1, ...png('a-notes') }, { row: 2, col: 2, ...png('a-image') }, { row: 3, col: 0, ...png('b-name') }, { row: 4, col: 2, ...png('c') }];
+  const media = new Map();
+  const { items } = tabToItems(rows, { images, media });
+  const bytes = (i) => media.get(i.image.slice('/media/'.length))?.data.toString('latin1');
+  assert.equal(bytes(items[0]), '\x89PNGa-image', 'header row is sheet row 1, so A is sheet row 2');
+  assert.equal(bytes(items[1]), '\x89PNGb-name');
+  assert.equal(items[2].image, 'https://x.test/c.png');
+  assert.equal(items[2].imageSize, null);
+});

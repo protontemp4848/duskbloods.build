@@ -173,6 +173,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 .list-entry { padding: 24px 0; border-bottom: 1px solid var(--line); scroll-margin-top: 72px; }
 .list-entry--image { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 20px; }
 .list-thumb { width: 72px; aspect-ratio: 3 / 4; object-fit: cover; object-position: top; border: 1px solid var(--line); }
+.list-thumb--square { aspect-ratio: auto; object-fit: contain; background: #000; }
 .list-main { max-width: 860px; }
 .list-main h2 { font: 500 28px/1.1 var(--serif); letter-spacing: -.01em; }
 .list-main h2 a { text-decoration: none; }
@@ -211,6 +212,9 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 .also-in { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
 .xref { text-decoration-color: var(--accent); }
 .entry--image .entry-figure { position: sticky; top: 80px; align-self: start; }
+/* Icons show at their own size (never upscaled into a blur), not stretched to the portrait column. */
+.entry--icon .entry-figure img { width: auto; max-width: 100%; background: #000; }
+.portrait--square img { aspect-ratio: 1; object-fit: contain; background: #000; }
 
 /* Section badges */
 .with-badge { display: inline-flex; align-items: center; gap: 8px; }

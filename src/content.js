@@ -1,7 +1,7 @@
 // Turns raw sheet tabs into the site's content model.
 //
 // Sheet conventions:
-//   _site       key | value rows: title, tagline, release_date, hero_image, discord_url, ...
+//   _site       key | value rows: title, tagline, release_date, discord_url, game, ...
 //               (keys ending in _url/_image must be http(s) URLs)
 //   _pages      page | description | view | icon | color rows, for "Compendium", "Updates" or any category tab's
 //               name: intro text, layout override (grid | list | table), and the section badge (see icons.js)
@@ -13,10 +13,14 @@
 //   name|title (else any "... Name")  slug  image|picture|portrait (else any "... Picture/Image")
 //   summary|description  body|details|content  tags|type  date  link|url|source  draft (TRUE hides the row)
 //
+// Images: a URL in the image column, or a picture placed in the row (Insert > Image in Google Sheets; best in the
+// image column). Placed pictures are served from /media/<content-hash>.<ext>.
+//
 // Paired columns: "X" next to "X Description" (e.g. "Skill 2 (Level 12)" + "Skill 2 Description") become an
 // ability { group: "Skills", name, note: "Level 12", text }. Columns whose text is long on average become
 // prose sections; the rest are short stats.
 
+import { createHash } from 'node:crypto';
 import { resolveBadge } from './icons.js';
 
 const ALIASES = {
@@ -101,9 +105,18 @@ function findPairs(columns, taken) {
   return pairs;
 }
 
-/** Converts a tab's rows (header row first) into item objects. */
-export function tabToItems(rows) {
+// Pictures placed on the sheet: stored once by content hash, served at /media/<key>.
+function storeImage(media, img) {
+  const key = `${createHash('sha256').update(img.data).digest('hex').slice(0, 16)}.${img.ext}`;
+  media.set(key, { type: img.type, data: img.data });
+  return `/media/${key}`;
+}
+
+/** Converts a tab's rows (header row first) into item objects. `images` are the tab's placed pictures. */
+export function tabToItems(rows, { images = [], media = new Map() } = {}) {
   const [header = [], ...body] = trimRows(rows);
+  // Sheet row index of body[0], to match pictures (anchored by sheet row) to entries.
+  const firstBodyRow = rows.findIndex((r) => r.some((c) => String(c ?? '').trim())) + 1;
   const columns = header.map((label, i) => ({ label, key: normKey(label), i })).filter((c) => c.label);
   const role = {};
   for (const [r, names] of Object.entries(ALIASES)) {
@@ -129,14 +142,22 @@ export function tabToItems(rows) {
 
   const used = new Set();
   const items = [];
-  for (const row of body) {
+  // A row's picture: the one in the image column if there is one, else any picture anchored in that row.
+  const pictureFor = (sheetRow) => {
+    const inRow = images.filter((img) => img.row === sheetRow);
+    return inRow.find((img) => role.image && img.col === role.image.i) ?? inRow[0];
+  };
+  for (const [k, row] of body.entries()) {
     const get = (col) => (col ? row[col.i] ?? '' : '');
     const title = get(titleCol);
     if (!title || isTruthy(get(role.draft))) continue;
+    const url = safeUrl(get(role.image));
+    const picture = url ? null : pictureFor(firstBodyRow + k);
     items.push({
       title,
       slug: uniqueSlug(slugify(get(role.slug) || title), used),
-      image: safeUrl(get(role.image)),
+      image: url || (picture ? storeImage(media, picture) : ''),
+      imageSize: picture?.size ?? null, // [width, height] when known
       summary: get(role.summary),
       body: get(role.body),
       tags: get(role.tags).split(',').map((t) => t.trim()).filter(Boolean),
@@ -187,15 +208,18 @@ function readPagesTab(rows) {
   return pages;
 }
 
-// Portrait grid when most entries have pictures; stacked list when there's prose or abilities; else a table.
+// Portrait grid when most entries have pictures and there's no long prose (prose reads better as a list);
+// stacked list when there's prose or abilities; else a table.
 function autoView({ items, abilityLabels }) {
-  if (items.length && items.filter((i) => i.image).length >= items.length / 2) return 'grid';
+  const prose = items.some((i) => i.sections.length);
+  if (items.length && !prose && items.filter((i) => i.image).length >= items.length / 2) return 'grid';
   if (abilityLabels.length || items.some((i) => i.sections.length)) return 'list';
   return 'table';
 }
 
 /** Builds the full site model from readWorkbook() output. */
 export function buildContent(tabs, { fetchedAt = new Date() } = {}) {
+  const media = new Map();
   let site = { ...DEFAULT_SITE };
   let news = [];
   let pages = new Map();
@@ -215,10 +239,10 @@ export function buildContent(tabs, { fetchedAt = new Date() } = {}) {
     }
     if (tab.hidden || name.startsWith('_')) continue;
     if (key === 'news' || key === 'updates') {
-      news = tabToItems(tab.rows).items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      news = tabToItems(tab.rows, { images: tab.images, media }).items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       continue;
     }
-    const parsed = tabToItems(tab.rows);
+    const parsed = tabToItems(tab.rows, { images: tab.images, media });
     if (!parsed.columns.length) continue; // blank tab, e.g. the default "Sheet1"
     categories.push({ name, slug: uniqueSlug(slugify(name), usedSlugs), ...parsed });
   }
@@ -228,11 +252,14 @@ export function buildContent(tabs, { fetchedAt = new Date() } = {}) {
     c.view = page?.view || autoView(c);
     c.badge = resolveBadge(c.name, page, i);
   });
-  return {
+  const content = {
     site, news, categories,
     pages: { compendium: pages.get('compendium')?.description ?? '', updates: pages.get('updates')?.description ?? '' },
     badges: { updates: resolveBadge('Updates', pages.get('updates')) },
     origin: '', // the server sets the public origin per request
     fetchedAt: fetchedAt.toISOString(),
   };
+  // Image bytes for /media/<key>; non-enumerable so /api/content's JSON stays small.
+  Object.defineProperty(content, 'media', { value: media, enumerable: false });
+  return content;
 }
