@@ -195,7 +195,7 @@ export function buildContent(tabs, { fetchedAt = new Date() } = {}) {
   let news = [];
   let pages = new Map();
   const categories = [];
-  const usedSlugs = new Set(['search', 'updates', 'compendium', 'api', 'healthz', 'static']);
+  const usedSlugs = new Set(['search', 'updates', 'compendium', 'api', 'health', 'static']);
 
   for (const tab of tabs) {
     const name = tab.name.trim();

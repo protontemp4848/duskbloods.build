@@ -97,8 +97,8 @@ test('404s, static files and path traversal', async () => {
   assert.equal((await get('/static/../src/server.js')).status, 404);
 });
 
-test('healthz and JSON API', async () => {
-  assert.deepEqual(JSON.parse((await get('/healthz')).text), { ok: true, loadedAt: 'now', error: null });
+test('health and JSON API', async () => {
+  assert.deepEqual(JSON.parse((await get('/health')).text), { ok: true, loadedAt: 'now', error: null });
   const api = JSON.parse((await get('/api/content')).text);
   assert.equal(api.categories.length, 3);
 });

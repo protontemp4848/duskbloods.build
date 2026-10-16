@@ -80,7 +80,7 @@ cmd_local() {
   docker run --rm -it --init -p "${PORT}:8080" "${args[@]}" "$LOCAL_IMAGE"
 }
 
-# Starts the container, waits for /healthz, and checks each page type returns the expected status.
+# Starts the container, waits for /health, and checks each page type returns the expected status.
 smoke_check() {
   local label="$1"; shift
   local name="${SERVICE}-smoke-$$" port
@@ -89,7 +89,7 @@ smoke_check() {
   trap "docker rm -f $name >/dev/null 2>&1 || true" RETURN
   port="$(docker port "$name" 8080 | head -1 | sed 's/.*://')"
   local base="http://127.0.0.1:${port}"
-  for _ in $(seq 1 30); do curl -sf "$base/healthz" >/dev/null && break; sleep 0.5; done
+  for _ in $(seq 1 30); do curl -sf "$base/health" >/dev/null && break; sleep 0.5; done
 
   local failures=0
   check() {
@@ -98,7 +98,7 @@ smoke_check() {
     if [[ "$got" == "$want" ]]; then echo "  ok   $got $path"; else echo "  FAIL $got $path (wanted $want)"; failures=$((failures + 1)); fi
   }
   log "Smoke test (${label}) on $base"
-  echo "  healthz: $(curl -s "$base/healthz")"
+  echo "  health: $(curl -s "$base/health")"
   local path want
   for spec in "${SMOKE_PATHS[@]}"; do read -r path want <<<"$spec"; check "$path" "$want"; done
   [[ $failures == 0 ]] || { docker logs "$name" | tail -20; die "Smoke test (${label}) failed"; }
@@ -110,11 +110,13 @@ cmd_smoke() {
   SMOKE_PATHS=("/ 200" "/compendium 200" "/c/bloodsworn 200" "/c/bloodsworn/sample-bloodsworn-a 200" "/c/weapons 200" "/updates 200"
     "/updates/sample-update-site-launched 200" "/search?q=sabre 200" "/api/content 200" "/static/style.css 200" "/static/app.js 200" "/c/nope 404")
   smoke_check "sample data" -e SHEET_FILE=/data/sample.xlsx -v "$PWD/sample.xlsx:/data/sample.xlsx:ro"
-  SMOKE_PATHS=("/ 200" "/compendium 200" "/updates 200" "/search?q=x 200" "/healthz 200")
+  SMOKE_PATHS=("/ 200" "/compendium 200" "/updates 200" "/search?q=x 200" "/health 200")
   smoke_check "live sheet" -e "SHEET_ID=${SHEET_ID}"
   log "Smoke tests passed"
 }
 
+# Public access uses --no-invoker-iam-check rather than granting allUsers the invoker role: the duskbloods-build
+# organisation's domain-restricted-sharing policy forbids allUsers bindings, and gcloud only warns when that fails.
 # Idempotent: safe to re-run; existing resources and bindings are left as they are.
 cmd_setup() {
   cloud_config
@@ -166,7 +168,7 @@ cmd_deploy() {
     --region "$REGION" \
     --image "${IMAGE}:${TAG}" \
     --service-account "$RUNTIME_SA" \
-    --allow-unauthenticated \
+    --no-invoker-iam-check \
     --port 8080 \
     --cpu 1 --memory 256Mi \
     --min-instances 0 --max-instances 3 \

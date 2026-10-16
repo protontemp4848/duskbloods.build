@@ -76,7 +76,8 @@ export function createApp(source) {
     const parts = url.pathname.split('/').filter(Boolean).map((p) => { try { return decodeURIComponent(p); } catch { return p; } });
 
     try {
-      if (url.pathname === '/healthz') return send(200, JSON.stringify({ ok: true, ...source.status() }), 'application/json');
+      // Not /healthz: Cloud Run reserves some paths ending in z, and never forwards them to the container.
+      if (url.pathname === '/health') return send(200, JSON.stringify({ ok: true, ...source.status() }), 'application/json');
 
       if (parts[0] === 'static' && parts.length === 2) {
         const ext = parts[1].slice(parts[1].lastIndexOf('.'));

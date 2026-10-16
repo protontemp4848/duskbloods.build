@@ -102,7 +102,7 @@ The service is public (`--allow-unauthenticated`), scales to zero, and needs no 
 - **test**: `npm test`, then `./deploy.sh smoke` (Docker build with tests inside, container smoke test on sample data
   and the live sheet).
 - **deploy** (only `main`): builds and pushes the image to Artifact Registry, deploys to Cloud Run, then checks the live
-  URL returns 200 for `/healthz`, `/`, `/compendium` and `/updates`. Deploys never overlap.
+  URL returns 200 for `/health`, `/`, `/compendium` and `/updates`. Deploys never overlap.
 
 Repository secrets: `GOOGLE_CLOUD_PROJECT`, `CLOUD_RUN_NAME`, and `CLOUD_RUN_SERVICE_ACCOUNT` (the deploy account's JSON
 key). Optional repository variables: `REGION` (default `europe-west1`) and `SHEET_ID`.
@@ -120,6 +120,6 @@ services as `duskbloods-runtime`.
 ## Endpoints
 
 `/` home · `/compendium` · `/c/:category` · `/c/:category/:entry` · `/updates` · `/updates/:post` · `/search?q=` ·
-`/api/content` (everything as JSON) · `/healthz` (last refresh time and error, if any)
+`/api/content` (everything as JSON) · `/health` (last refresh time and error, if any)
 
-If a sheet refresh fails, the last good copy keeps being served and the error is reported on `/healthz` and in the logs.
+If a sheet refresh fails, the last good copy keeps being served and the error is reported on `/health` and in the logs.

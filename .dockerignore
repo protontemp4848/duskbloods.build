@@ -6,3 +6,5 @@ node_modules
 deploy.sh
 README.md
 templates
+# Credentials written by google-github-actions/auth in CI
+gha-creds-*.json

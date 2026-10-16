@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Unit and HTTP tests
@@ -49,7 +49,7 @@ jobs:
       REGION: ${{ vars.REGION || 'europe-west1' }}
       SHEET_ID: ${{ vars.SHEET_ID }} # empty -> deploy.sh's built-in sheet id
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check required secrets
         env:
@@ -61,11 +61,11 @@ jobs:
           [ "$HAS_KEY" = "true" ] || missing="$missing CLOUD_RUN_SERVICE_ACCOUNT"
           if [ -n "$missing" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
 
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.CLOUD_RUN_SERVICE_ACCOUNT }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@v3
 
       - name: Build and push image
         run: ./deploy.sh push
@@ -77,10 +77,11 @@ jobs:
         run: |
           url=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
           echo "Live at $url"
-          for path in /healthz / /compendium /updates; do
+          for path in /health / /compendium /updates; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --retry 5 --retry-all-errors --retry-delay 3 "$url$path")
             echo "$code $path"
+            if [ "$code" = "403" ]; then echo "::error::$path returned 403: the service isn't public (check --no-invoker-iam-check in deploy.sh)"; exit 1; fi
             [ "$code" = "200" ] || { echo "::error::$path returned $code"; exit 1; }
           done
-          curl -sf "$url/healthz"
+          curl -sf "$url/health"
           echo "### Deployed to $url" >> "$GITHUB_STEP_SUMMARY"
