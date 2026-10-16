@@ -25,10 +25,10 @@ test('home page renders site, countdown, news and categories', async () => {
   const r = await get('/');
   assert.equal(r.status, 200);
   assert.match(r.csp, /script-src 'self'/);
-  assert.match(r.text, /<title>Duskbloods\.build<\/title>/);
+  assert.match(r.text, /<title>The Duskbloods Wiki: Bloodsworn, Weapons, Search &amp; More<\/title>/);
   assert.match(r.text, /Sample tagline &lt;b&gt;escaped&lt;\/b&gt;/);
   assert.match(r.text, /<p class="release mono">Release 31 Dec 2026 · <strong>\d+<\/strong> days to go<\/p>/);
-  assert.match(r.text, /<h1 class="visually-hidden">Duskbloods\.build<\/h1>/);
+  assert.match(r.text, /<h1 class="visually-hidden">The Duskbloods compendium: Bloodsworn, Weapons, Search and more<\/h1>/);
   assert.doesNotMatch(r.text, /class="(masthead|display|lede)/, 'no big title block');
   assert.match(r.text, /href="\/updates\/newer-post"/);
   assert.match(r.text, /href="\/c\/bloodsworn"/);
@@ -117,10 +117,12 @@ test('_pages descriptions render on their pages, escaped, and become the meta de
   assert.match((await get('/updates')).text, /<div class="page-desc"><p>News from the dusk.<\/p><\/div>/);
   const cat = (await get('/c/bloodsworn')).text;
   assert.match(cat, /<\/nav>\s*<div class="page-desc"><p>The playable hunters.<\/p><p>Second paragraph.<\/p><\/div>/);
-  assert.match(cat, /<meta name="description" content="The playable hunters. Second paragraph.">/);
+  // Under 50 chars, so it's extended with the real entries rather than shipped thin.
+  assert.match(cat, /<meta name="description" content="The playable hunters. Second paragraph. All 3 bloodsworn in The Duskbloods: Example Hunter, Example Hunter, &lt;script&gt;alert\(1\)&lt;\/script&gt;.">/);
   const weapons = (await get('/c/weapons')).text;
   assert.doesNotMatch(weapons, /page-desc/);
-  assert.match(weapons, /<meta name="description" content="Sample tagline &lt;b&gt;escaped&lt;\/b&gt;">/, 'falls back to the tagline');
+  assert.match(weapons, /<meta name="description" content="1 weapon in The Duskbloods: Placeholder Axe.">/, 'no description in the sheet: built from the entries');
+  assert.match(weapons, /<title>Weapons in The Duskbloods \| Duskbloods\.build<\/title>/);
 });
 
 test('non-GET methods are rejected', async () => {

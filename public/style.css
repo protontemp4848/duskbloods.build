@@ -1,11 +1,18 @@
+/* Self-hosted (OFL) Latin subsets; Plex Sans is one variable file for 400-600. */
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400; font-display: swap; src: url('/static/eb-garamond-400-italic.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'EB Garamond'; font-style: normal; font-weight: 500; font-display: swap; src: url('/static/eb-garamond-500.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/static/ibm-plex-mono-400.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/static/ibm-plex-mono-500.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400 600; font-display: swap; src: url('/static/ibm-plex-sans.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
 :root {
   --bg: #0b0b0c;
   --surface: #121214;
   --line: #232326;
   --line-strong: #34343a;
   --text: #e7e4df;
-  --muted: #8a8892;
-  --faint: #5d5b63;
+  --muted: #9d9ba5;
+  --faint: #807e88; /* >= 4.5:1 on --bg and --surface */
   --accent: #b52a3e;
   --accent-text: #e2697b;
   --serif: 'EB Garamond', Garamond, 'Times New Roman', serif;
@@ -27,7 +34,8 @@ main { flex: 1; padding-block: 40px 96px; }
 a { color: inherit; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 a:hover { color: var(--accent-text); text-decoration-color: currentColor; }
 h1, h2, h3, p { margin: 0; }
-img { max-width: 100%; display: block; }
+/* height:auto so width/height attributes reserve space without distorting the image */
+img { max-width: 100%; height: auto; display: block; }
 .wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
 .mono { font-family: var(--mono); font-size: .9em; font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
@@ -79,6 +87,9 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 /* Page heads + compendium */
 .page-head { margin-bottom: 24px; }
 .page-head h1 { font: 500 44px/1 var(--serif); letter-spacing: -.02em; }
+.eyebrow { font-size: 13px; margin-bottom: 8px; }
+.eyebrow a { color: var(--muted); text-decoration: none; }
+.eyebrow a:hover { color: var(--text); }
 .page-head > p { margin-top: 12px; }
 .page-desc { max-width: 64ch; color: var(--muted); font-size: 16px; margin-top: 16px; }
 .page-desc p + p { margin-top: .75em; }

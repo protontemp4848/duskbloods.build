@@ -15,6 +15,7 @@
 #   PROJECT_ID  (default: current gcloud project)   REGION   (default: europe-west1)
 #   SERVICE     (default: duskbloods)                REPO     (default: duskbloods)
 #   SHEET_ID    (default: the Duskbloods sheet)      CACHE_SECONDS (default: 60)
+#   SITE_URL    public origin for canonical/sitemap URLs, e.g. https://duskbloods.build (default: the request host)
 #   PORT        local port for `local` (default: 8080)
 #   RUNTIME_SA  account the service runs as (default: duskbloods-runtime@PROJECT_ID, which has no roles)
 #   DEPLOYER_SA account CI deploys as, for `setup` to grant roles to (e.g. duskbloods-build-sa@PROJECT_ID)
@@ -172,7 +173,7 @@ cmd_deploy() {
     --port 8080 \
     --cpu 1 --memory 256Mi \
     --min-instances 0 --max-instances 3 \
-    --set-env-vars "SHEET_ID=${SHEET_ID},CACHE_SECONDS=${CACHE_SECONDS}"
+    --set-env-vars "SHEET_ID=${SHEET_ID},CACHE_SECONDS=${CACHE_SECONDS},SITE_URL=${SITE_URL:-}"
   [[ "${DRY_RUN:-}" == 1 ]] || log "Live at: $(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')"
 }
 

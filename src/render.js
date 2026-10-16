@@ -1,5 +1,7 @@
 // Server-rendered HTML. Everything from the sheet goes through esc(); URLs through safeUrl() upstream.
 import { badgeHtml } from './icons.js';
+import { asset } from './assets.js';
+import * as seo from './seo.js';
 
 export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -49,7 +51,7 @@ const richness = (i) => i.fields.length + i.abilities.length + i.sections.length
 // Entry title -> every { category, item } with that title, richest first. Built once per content snapshot.
 const indexCache = new WeakMap();
 function titleIndex(content) {
-  if (!indexCache.has(content)) {
+  if (!indexCache.has(content.categories)) {
     const index = new Map();
     for (const category of content.categories) {
       for (const item of category.items) {
@@ -58,9 +60,9 @@ function titleIndex(content) {
       }
     }
     for (const list of index.values()) list.sort((a, b) => richness(b.item) - richness(a.item));
-    indexCache.set(content, index);
+    indexCache.set(content.categories, index);
   }
-  return indexCache.get(content);
+  return indexCache.get(content.categories);
 }
 
 // The same name listed in other tabs (e.g. "Albert" in Characters, Weapons and Skills).
@@ -74,9 +76,12 @@ function linked(content, value, self) {
 
 /* ---------- Layout ---------- */
 
-function layout({ content, title, body, active = '', q = '', description = '' }) {
-  const { site } = content;
-  const pageTitle = title ? `${title} — ${site.title}` : site.title;
+// meta: { title, ogTitle, description, path (canonical), image, imageAlt, card, type, noindex, jsonld: [nodes], published, lcpImage }
+function layout({ content, meta, body, active = '', q = '' }) {
+  const { site, origin } = content;
+  const canonical = meta.path ? `${origin}${meta.path}` : '';
+  const image = meta.image || `${origin}${asset('og.png')}`;
+  const ogTitle = meta.ogTitle || meta.title;
   const nav = [['/compendium', 'Compendium', 'compendium'], ['/updates', 'Updates', 'updates']]
     .map(([href, label, key]) => `<a href="${href}"${active === key ? ' aria-current="page"' : ''}>${label}</a>`).join('');
   return `<!doctype html>
@@ -84,13 +89,28 @@ function layout({ content, title, body, active = '', q = '', description = '' })
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(pageTitle)}</title>
-<meta name="description" content="${esc(oneLine(description || site.tagline))}">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;1,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="/static/style.css">
-<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<title>${esc(meta.title)}</title>
+<meta name="description" content="${esc(oneLine(meta.description))}">
+${meta.noindex ? '<meta name="robots" content="noindex, follow">' : ''}
+${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
+<meta property="og:site_name" content="${esc(site.title)}">
+<meta property="og:type" content="${meta.type ?? 'website'}">
+<meta property="og:title" content="${esc(ogTitle)}">
+<meta property="og:description" content="${esc(oneLine(meta.description))}">
+${canonical ? `<meta property="og:url" content="${esc(canonical)}">` : ''}
+<meta property="og:image" content="${esc(image)}">
+${meta.image ? '' : '<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">'}
+<meta property="og:image:alt" content="${esc(meta.imageAlt ?? `${site.title}: ${site.tagline}`)}">
+${meta.published ? `<meta property="article:published_time" content="${esc(meta.published)}">` : ''}
+<meta name="twitter:card" content="${meta.card ?? 'summary_large_image'}">
+<meta name="theme-color" content="#0b0b0c">
+<link rel="preload" href="/static/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
+${meta.lcpImage ? `<link rel="preconnect" href="${esc(new URL(meta.lcpImage).origin)}">\n<link rel="preload" as="image" href="${esc(meta.lcpImage)}" fetchpriority="high">` : ''}
+<link rel="stylesheet" href="${asset('style.css')}">
+<link rel="icon" href="${asset('favicon.svg')}" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="${asset('apple-touch-icon.png')}">
+${seo.jsonLdTag([...seo.siteGraph(content), ...(meta.jsonld ?? [])])}
 </head>
 <body>
 <header class="bar">
@@ -109,13 +129,14 @@ function layout({ content, title, body, active = '', q = '', description = '' })
     <p class="mono">Synced ${esc(content.fetchedAt.slice(0, 16).replace('T', ' '))} UTC</p>
   </div>
 </footer>
-<script src="/static/app.js" defer></script>
+<script src="${asset('app.js')}" defer></script>
 </body>
 </html>`;
 }
 
 const empty = (message) => `<p class="empty">${esc(message)}</p>`;
-const pageIntro = (text) => (text ? `<div class="page-desc">${paragraphs(text)}</div>` : '');
+// Placeholder text ("TODO") from the sheet is never shown to visitors or crawlers.
+const pageIntro = (text) => (seo.isPlaceholder(text) ? '' : `<div class="page-desc">${paragraphs(text)}</div>`);
 
 // Attributes the client-side filter reads.
 function filterAttrs(item, extra = []) {
@@ -138,7 +159,7 @@ function categoryIndex(categories) {
   if (!categories.length) return empty('No categories yet.');
   return `<ul class="index">${categories.map((c) => `<li>
   <a class="with-badge" href="/c/${esc(c.slug)}">${badge(c.badge)}${esc(c.name)}</a>
-  <span class="index-cols">${esc(oneLine(c.description || [...c.fields, ...new Set(c.abilityLabels.map((l) => l.replace(/\s*\d+.*$/, '')))].slice(0, 4).join(' · ')))}</span>
+  <span class="index-cols">${esc(oneLine((!seo.isPlaceholder(c.description) && c.description) || [...c.fields, ...new Set(c.abilityLabels.map((l) => l.replace(/\s*\d+.*$/, '')))].slice(0, 4).join(' · ')))}</span>
   <span class="mono">${c.items.length}</span>
 </li>`).join('')}</ul>`;
 }
@@ -152,12 +173,13 @@ export function homePage(content, now = new Date()) {
   const roster = categories.find((c) => c.view === 'grid' && c.items.some((i) => i.image));
   const total = categories.reduce((n, c) => n + c.items.length, 0);
 
+  const sections = categories.filter((c) => c.items.length).slice(0, 3).map((c) => c.name);
   const body = `
-<h1 class="visually-hidden">${esc(site.title)}</h1>
+<h1 class="visually-hidden">${esc(site.game)} compendium${sections.length ? `: ${esc(sections.join(', '))} and more` : ''}</h1>
 ${release}
 ${roster ? `<section class="home-roster">
   <header class="section-head"><h2 class="with-badge">${badge(roster.badge)}${esc(roster.name)}</h2><a href="/c/${esc(roster.slug)}">View all</a></header>
-  ${portraitGrid(roster, roster.items.slice(0, 12))}
+  ${portraitGrid(roster, roster.items.slice(0, 12), { eager: 6 })}
 </section>` : ''}
 <div class="home-cols">
   <section>
@@ -169,7 +191,14 @@ ${roster ? `<section class="home-roster">
     ${categoryIndex(categories)}
   </section>
 </div>`;
-  return layout({ content, body });
+  const meta = {
+    title: seo.fullTitle(`${site.game} Wiki: ${sections.length ? `${sections.join(', ')} & More` : 'Compendium'}`, site),
+    ogTitle: `${site.title}: ${site.game} compendium`,
+    description: seo.describeHome(content),
+    path: '/',
+    lcpImage: roster?.items.find((i) => i.image)?.image,
+  };
+  return layout({ content, meta, body });
 }
 
 /* ---------- Category views ---------- */
@@ -183,13 +212,22 @@ export function compendiumPage(content) {
   const body = `
 <header class="page-head"><h1>Compendium</h1>${pageIntro(content.pages.compendium)}</header>
 ${categoryIndex(content.categories)}`;
-  return layout({ content, title: 'Compendium', body, active: 'compendium', description: content.pages.compendium });
+  const counts = content.categories.map((c) => `${c.items.length} ${c.name.toLowerCase()}`).join(', ');
+  const meta = {
+    title: seo.fullTitle(`${content.site.game} Compendium: Every Category`, content.site),
+    description: seo.isPlaceholder(content.pages.compendium) ? seo.clip(`Every category in the ${content.site.game} compendium: ${counts}.`) : seo.clip(content.pages.compendium),
+    path: '/compendium',
+    jsonld: [seo.breadcrumbs(content.origin, [['Compendium']])],
+  };
+  return layout({ content, meta, body, active: 'compendium' });
 }
 
 // Character-select style: tall portraits, name, and the first two short stats.
-function portraitGrid(category, items) {
-  return `<div class="portraits">${items.map((item) => `<a class="portrait" href="${hrefOf(category, item)}" ${filterAttrs(item)}>
-  ${item.image ? `<img src="${esc(item.image)}" alt="" loading="lazy">` : `<span class="portrait-blank" aria-hidden="true">${esc(item.title.slice(0, 1))}</span>`}
+// eager: how many leading portraits are above the fold (loaded eagerly, the first with high priority, for LCP).
+function portraitGrid(category, items, { eager = 0 } = {}) {
+  const loading = (i) => (i === 0 && eager ? ' fetchpriority="high"' : i < eager ? '' : ' loading="lazy"');
+  return `<div class="portraits">${items.map((item, i) => `<a class="portrait" href="${hrefOf(category, item)}" ${filterAttrs(item)}>
+  ${item.image ? `<img src="${esc(item.image)}" alt="" width="427" height="990" decoding="async"${loading(i)}>` : `<span class="portrait-blank" aria-hidden="true">${esc(item.title.slice(0, 1))}</span>`}
   <span class="portrait-text">
     <strong>${esc(item.title)}</strong>
     ${item.fields.length ? `<small>${esc(item.fields.slice(0, 2).map((f) => f.value).join(' · '))}</small>` : ''}
@@ -261,7 +299,7 @@ export function categoryPage(content, category) {
   const tags = [...new Set(category.items.flatMap((i) => i.tags))].sort((a, b) => a.localeCompare(b));
   const hasTags = tags.length > 0;
   let view;
-  if (category.view === 'grid') view = portraitGrid(category, category.items);
+  if (category.view === 'grid') view = portraitGrid(category, category.items, { eager: 6 });
   else if (category.view === 'list') view = entryList(content, category);
   else {
     view = entryTable(content, category.items.map((item) => ({ item, href: hrefOf(category, item) })), category, hasTags ? {
@@ -270,7 +308,7 @@ export function categoryPage(content, category) {
     } : {});
   }
   const body = `
-<header class="page-head"><h1>Compendium</h1></header>
+<header class="page-head"><p class="eyebrow"><a href="/compendium">Compendium</a></p><h1>${esc(category.name)}</h1></header>
 ${tabs(content.categories, category)}
 ${pageIntro(category.description)}
 ${category.items.length ? `
@@ -281,7 +319,21 @@ ${category.items.length ? `
 </div>
 ${view}
 <p class="empty" hidden data-empty>No entries match.</p>` : empty(`Nothing in ${category.name} yet.`)}`;
-  return layout({ content, title: category.name, body, active: 'compendium', description: category.description });
+  const { site, origin } = content;
+  const path = `/c/${category.slug}`;
+  const meta = {
+    lcpImage: category.view === 'grid' ? category.items.find((i) => i.image)?.image : undefined,
+    title: seo.fullTitle(category.items.length > 1 ? `All ${category.items.length} ${category.name} in ${site.game}` : `${category.name} in ${site.game}`, site),
+    description: seo.describeCategory(category, site),
+    path,
+    jsonld: [
+      seo.breadcrumbs(origin, [['Compendium', '/compendium'], [category.name]]),
+      { '@type': 'CollectionPage', '@id': `${origin}${path}#page`, url: `${origin}${path}`, name: category.name, isPartOf: { '@id': `${origin}/#website` },
+        mainEntity: { '@type': 'ItemList', numberOfItems: category.items.length,
+          itemListElement: category.items.map((item, i) => ({ '@type': 'ListItem', position: i + 1, name: item.title, url: `${origin}${seo.canonicalPathFor(content, category, item)}` })) } },
+    ],
+  };
+  return layout({ content, meta, body, active: 'compendium' });
 }
 
 /* ---------- Entry pages ---------- */
@@ -296,7 +348,7 @@ function entry(content, item, { crumbs, pager = '' }) {
     <h1>${esc(item.title)}</h1>
     ${item.tags.length ? `<p class="entry-tags">${item.tags.map(esc).join('<span aria-hidden="true"> · </span>')}</p>` : ''}
   </header>
-  ${item.image ? `<figure class="entry-figure"><img class="detail-img" src="${esc(item.image)}" alt="${esc(item.title)}"></figure>` : ''}
+  ${item.image ? `<figure class="entry-figure"><img class="detail-img" src="${esc(item.image)}" alt="${esc(item.title)}" width="427" height="990" fetchpriority="high"></figure>` : ''}
   <div class="entry-body">
     ${item.summary ? `<p class="flavor">${esc(item.summary)}</p>` : ''}
     ${item.fields.length ? `<dl class="stats">${item.fields.map((f) => `<div><dt>${esc(f.label)}</dt><dd${isNumeric(f.value) ? ' class="mono"' : ''}>${linked(content, f.value, item)}</dd></div>`).join('')}</dl>` : ''}
@@ -320,8 +372,30 @@ function pagerFor(list, index, hrefFor) {
 }
 
 export function itemPage(content, category, item) {
+  const { site, origin } = content;
+  const groups = [...new Set(item.abilities.map((a) => a.group))];
+  const subject = groups.length ? `${item.title}: ${groups.join(' & ')}` : `${item.title}: ${seo.singular(category.name)}`;
+  const path = seo.canonicalPathFor(content, category, item);
+  const description = seo.describeItem(item, category, site);
+  const meta = {
+    // "Albert: Skills & Aspects | The Duskbloods | Duskbloods.build", dropping suffixes that don't fit.
+    title: `${subject} | ${site.game}`.length <= 65 ? seo.fullTitle(`${subject} | ${site.game}`, site) : seo.fullTitle(subject, site),
+    ogTitle: `${item.title} · ${category.name}`,
+    description,
+    path,
+    image: item.image,
+    lcpImage: item.image,
+    imageAlt: item.image ? item.title : undefined,
+    card: item.image ? 'summary' : undefined, // portraits crop badly in large cards
+    jsonld: [
+      seo.breadcrumbs(origin, [['Compendium', '/compendium'], [category.name, `/c/${category.slug}`], [item.title]]),
+      { '@type': 'ItemPage', '@id': `${origin}${path}#page`, url: `${origin}${path}`, name: item.title, description, isPartOf: { '@id': `${origin}/#website` },
+        about: { '@type': 'Thing', name: item.title, description, ...(item.image ? { image: item.image } : {}), subjectOf: { '@id': `${origin}/#game` } },
+        ...(item.image ? { primaryImageOfPage: { '@type': 'ImageObject', url: item.image } } : {}) },
+    ],
+  };
   return layout({
-    content, title: item.title, active: 'compendium', description: item.summary || category.description,
+    content, meta, active: 'compendium',
     body: entry(content, item, {
       crumbs: `<a href="/compendium">Compendium</a><span aria-hidden="true">/</span><a class="with-badge" href="/c/${esc(category.slug)}">${badge(category.badge)}${esc(category.name)}</a>`,
       pager: pagerFor(category.items, category.items.indexOf(item), (i) => hrefOf(category, i)),
@@ -331,12 +405,34 @@ export function itemPage(content, category, item) {
 
 export function updatesPage(content) {
   const body = `<header class="page-head"><h1>Updates</h1>${pageIntro(content.pages.updates)}</header>${updateLog(content.news)}`;
-  return layout({ content, title: 'Updates', body, active: 'updates', description: content.pages.updates });
+  const { site, news } = content;
+  const meta = {
+    title: seo.fullTitle(`${site.game} Updates & Patch Notes`, site),
+    description: !seo.isPlaceholder(content.pages.updates) ? seo.clip(content.pages.updates)
+      : seo.clip(news.length ? `Latest ${site.title} updates for ${site.game}: ${news.slice(0, 3).map((p) => p.title).join('; ')}.` : `News and site updates for the ${site.game} compendium.`),
+    path: '/updates',
+    jsonld: [seo.breadcrumbs(content.origin, [['Updates']])],
+  };
+  return layout({ content, meta, body, active: 'updates' });
 }
 
 export function postPage(content, post) {
+  const { site, origin } = content;
+  const path = `/updates/${post.slug}`;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(post.date) ? post.date : undefined;
+  const description = seo.clip(!seo.isPlaceholder(post.summary) ? post.summary : post.body || post.title);
+  const meta = {
+    title: seo.fullTitle(post.title, site), description, path, type: 'article', published: date,
+    image: post.image || undefined,
+    jsonld: [
+      seo.breadcrumbs(origin, [['Updates', '/updates'], [post.title]]),
+      { '@type': 'BlogPosting', headline: post.title, description, url: `${origin}${path}`, mainEntityOfPage: `${origin}${path}`,
+        ...(date ? { datePublished: date, dateModified: date } : {}), image: [post.image || `${origin}${asset('og.png')}`],
+        author: { '@type': 'Organization', name: site.title, url: `${origin}/` }, publisher: { '@type': 'Organization', name: site.title, url: `${origin}/` } },
+    ],
+  };
   return layout({
-    content, title: post.title, active: 'updates', description: post.summary,
+    content, meta, active: 'updates',
     body: entry(content, post, {
       crumbs: `<a class="with-badge" href="/updates">${badge(content.badges.updates)}Updates</a>`,
       pager: pagerFor(content.news, content.news.indexOf(post), (p) => `/updates/${esc(p.slug)}`),
@@ -352,9 +448,12 @@ ${results.length ? entryTable(content, results, null, {
   extraHead: '<th scope="col"><button type="button" data-sort="1">Category</button></th>',
   extraCell: ({ category }) => `<td><span class="with-badge">${badge(badgeForName(content, category))}${esc(category)}</span></td>`,
 }) : q ? empty('No matches.') : empty('Type a name, skill, stat or any text into the search box.')}`;
-  return layout({ content, title: q ? `Search: ${q}` : 'Search', body, q });
+  const meta = { title: seo.fullTitle(q ? `Search: ${q}` : 'Search', content.site), description: `Search the ${content.site.game} compendium.`, noindex: true };
+  return layout({ content, meta, body, q });
 }
 
 export function notFoundPage(content) {
-  return layout({ content, title: 'Not found', body: `<header class="page-head"><h1>Not found</h1></header><p>That page doesn’t exist. <a href="/">Go home</a>.</p>` });
+  const meta = { title: seo.fullTitle('Page not found', content.site), description: `That page doesn’t exist in the ${content.site.game} compendium.`, noindex: true };
+  return layout({ content, meta, body: `<header class="page-head"><h1>Not found</h1></header>
+<p>That page doesn’t exist. Try the <a href="/compendium">compendium</a>, the <a href="/updates">updates</a>, or <a href="/">go home</a>.</p>` });
 }

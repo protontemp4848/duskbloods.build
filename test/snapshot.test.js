@@ -44,6 +44,13 @@ test('Items renders as a list with flavour text, effect stat and collapsible lor
   assert.match(html, /<details class="more"><summary>Lore<\/summary>/);
 });
 
+test('placeholder descriptions ("TODO") are never shown on the page', () => {
+  const html = render.categoryPage(content, cat('Items'));
+  assert.doesNotMatch(html, /TODO/);
+  assert.doesNotMatch(render.compendiumPage(content), /TODO/);
+  assert.doesNotMatch(render.homePage(content), /TODO/);
+});
+
 test('Weapons (short values only) stays a table', () => {
   assert.match(render.categoryPage(content, cat('Weapons')), /<table class="entries"/);
 });

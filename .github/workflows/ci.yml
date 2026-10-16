@@ -4,7 +4,8 @@
 #   GOOGLE_CLOUD_PROJECT       GCP project id (duskbloods-build)
 #   CLOUD_RUN_NAME             Cloud Run service name
 #   CLOUD_RUN_SERVICE_ACCOUNT  JSON key of the deploy account (duskbloods-build-sa)
-# Optional repository variables: REGION (default europe-west1), SHEET_ID (default: the Duskbloods sheet).
+# Optional repository variables: REGION (default europe-west1), SHEET_ID (default: the Duskbloods sheet),
+#   SITE_URL (public origin for canonical/sitemap URLs once there's a custom domain).
 # One-time GCP setup: DEPLOYER_SA=<deploy account email> ./deploy.sh setup
 name: CI
 
@@ -48,6 +49,7 @@ jobs:
       SERVICE: ${{ secrets.CLOUD_RUN_NAME }}
       REGION: ${{ vars.REGION || 'europe-west1' }}
       SHEET_ID: ${{ vars.SHEET_ID }} # empty -> deploy.sh's built-in sheet id
+      SITE_URL: ${{ vars.SITE_URL }} # e.g. https://duskbloods.build; empty -> canonical URLs use the request host
     steps:
       - uses: actions/checkout@v7
 
@@ -77,7 +79,7 @@ jobs:
         run: |
           url=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
           echo "Live at $url"
-          for path in /health / /compendium /updates; do
+          for path in /health / /compendium /updates /sitemap.xml /robots.txt; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --retry 5 --retry-all-errors --retry-delay 3 "$url$path")
             echo "$code $path"
             if [ "$code" = "403" ]; then echo "::error::$path returned 403: the service isn't public (check --no-invoker-iam-check in deploy.sh)"; exit 1; fi

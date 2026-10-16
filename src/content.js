@@ -31,9 +31,14 @@ const ALIASES = {
   draft: ['draft', 'hidden'],
 };
 
+// Override any of these with _site rows (game, game_platform, game_developer, game_publisher feed structured data).
 export const DEFAULT_SITE = {
   title: 'Duskbloods.build',
   tagline: 'An unofficial compendium for The Duskbloods.',
+  game: 'The Duskbloods',
+  game_platform: 'Nintendo Switch 2',
+  game_developer: 'FromSoftware',
+  game_publisher: 'Nintendo',
 };
 
 const normKey = (s) => String(s).toLowerCase().replace(/[\s_\-]+/g, '');
@@ -227,6 +232,7 @@ export function buildContent(tabs, { fetchedAt = new Date() } = {}) {
     site, news, categories,
     pages: { compendium: pages.get('compendium')?.description ?? '', updates: pages.get('updates')?.description ?? '' },
     badges: { updates: resolveBadge('Updates', pages.get('updates')) },
+    origin: '', // the server sets the public origin per request
     fetchedAt: fetchedAt.toISOString(),
   };
 }

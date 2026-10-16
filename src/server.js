@@ -1,18 +1,37 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { brotliCompressSync, gzipSync, constants as zlibConstants } from 'node:zlib';
 import { createSource } from './sheet.js';
 import * as render from './render.js';
+import { assetHash } from './assets.js';
+import { originFor, sitemapXml, robotsTxt } from './seo.js';
 
 const STATIC_DIR = new URL('../public/', import.meta.url);
-const STATIC_TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
+const STATIC_TYPES = {
+  '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2', '.png': 'image/png', '.ico': 'image/x-icon',
+};
+const COMPRESSIBLE = /^(text\/|application\/(json|xml)|image\/svg)/;
+const YEAR = 'public, max-age=31536000, immutable';
+
+// Compressed static files, keyed by name + encoding (they only change on deploy).
+const staticCache = new Map();
+
+function compress(body, encoding, isStatic) {
+  if (encoding === 'br') {
+    // Dynamic HTML at a fast level; static files once at max level.
+    return brotliCompressSync(body, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: isStatic ? 11 : 5 } });
+  }
+  return gzipSync(body, { level: isStatic ? 9 : 6 });
+}
 
 const SECURITY_HEADERS = {
   'Content-Security-Policy': [
     "default-src 'self'",
     "img-src 'self' https: data:",
-    "style-src 'self' https://fonts.googleapis.com",
-    "font-src https://fonts.gstatic.com",
+    "style-src 'self'",
+    "font-src 'self'",
     "script-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
@@ -65,9 +84,25 @@ export function search(content, q) {
 
 export function createApp(source) {
   return async function handler(req, res) {
-    const send = (status, body, type = 'text/html; charset=utf-8', extra = {}) => {
-      res.writeHead(status, { 'Content-Type': type, ...SECURITY_HEADERS, ...extra });
-      res.end(req.method === 'HEAD' ? undefined : body);
+    const accepts = String(req.headers['accept-encoding'] ?? '');
+    const encoding = /\bbr\b/.test(accepts) ? 'br' : /\bgzip\b/.test(accepts) ? 'gzip' : '';
+    const https = String(req.headers['x-forwarded-proto'] ?? '').startsWith('https');
+    const send = (status, body, type = 'text/html; charset=utf-8', extra = {}, cacheKey = null) => {
+      const headers = { 'Content-Type': type, ...SECURITY_HEADERS, ...extra };
+      if (https) headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
+      let out = body;
+      if (COMPRESSIBLE.test(type)) {
+        headers.Vary = 'Accept-Encoding';
+        const raw = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+        if (encoding && raw.length > 1024) {
+          const key = cacheKey && `${cacheKey}|${encoding}`;
+          out = (key && staticCache.get(key)) ?? compress(raw, encoding, Boolean(cacheKey));
+          if (key) staticCache.set(key, out);
+          headers['Content-Encoding'] = encoding;
+        } else out = raw;
+      }
+      res.writeHead(status, headers);
+      res.end(req.method === 'HEAD' ? undefined : out);
     };
 
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(405, 'Method not allowed', 'text/plain', { Allow: 'GET, HEAD' });
@@ -79,20 +114,35 @@ export function createApp(source) {
       // Not /healthz: Cloud Run reserves some paths ending in z, and never forwards them to the container.
       if (url.pathname === '/health') return send(200, JSON.stringify({ ok: true, ...source.status() }), 'application/json');
 
-      if (parts[0] === 'static' && parts.length === 2) {
-        const ext = parts[1].slice(parts[1].lastIndexOf('.'));
-        if (!STATIC_TYPES[ext] || !/^[\w.-]+$/.test(parts[1])) return send(404, 'Not found', 'text/plain');
+      // One URL per page: /c/items/ -> /c/items (301 keeps the ranking signals).
+      if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
+        return send(301, '', 'text/plain', { Location: url.pathname.replace(/\/+$/, '') + url.search });
+      }
+
+      // Root-level files crawlers and browsers ask for by convention.
+      const rootFiles = { '/favicon.ico': 'favicon.ico', '/apple-touch-icon.png': 'apple-touch-icon.png' };
+      const staticName = rootFiles[url.pathname] ?? (parts[0] === 'static' && parts.length === 2 ? parts[1] : null);
+      if (staticName) {
+        const ext = staticName.slice(staticName.lastIndexOf('.'));
+        if (!STATIC_TYPES[ext] || !/^[\w.-]+$/.test(staticName)) return send(404, 'Not found', 'text/plain');
         try {
-          const file = await readFile(fileURLToPath(new URL(parts[1], STATIC_DIR)));
-          return send(200, file, STATIC_TYPES[ext], { 'Cache-Control': 'public, max-age=300' });
+          const file = await readFile(fileURLToPath(new URL(staticName, STATIC_DIR)));
+          // Fingerprinted URLs (?v=<hash>) and fonts never change in place, so they can be cached for a year.
+          const v = url.searchParams.get('v');
+          const cache = (v && v === assetHash(staticName)) || ext === '.woff2' ? YEAR : 'public, max-age=3600';
+          return send(200, file, STATIC_TYPES[ext], { 'Cache-Control': cache }, staticName);
         } catch { return send(404, 'Not found', 'text/plain'); }
       }
 
-      const content = await source.get();
+      const raw = await source.get();
+      // Per-request view: same content plus the public origin for canonical/og/sitemap URLs.
+      const content = { ...raw, origin: originFor(req) };
+      if (url.pathname === '/robots.txt') return send(200, robotsTxt(content.origin), 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
+      if (url.pathname === '/sitemap.xml') return send(200, sitemapXml(content), 'application/xml; charset=utf-8', { 'Cache-Control': 'public, max-age=600' });
       const page = (html) => send(200, html, undefined, { 'Cache-Control': 'public, max-age=60' });
       const notFound = () => send(404, render.notFoundPage(content));
 
-      if (url.pathname === '/api/content') return send(200, JSON.stringify(content), 'application/json', { 'Cache-Control': 'public, max-age=60' });
+      if (url.pathname === '/api/content') return send(200, JSON.stringify(raw), 'application/json', { 'Cache-Control': 'public, max-age=60' });
       if (parts.length === 0) return page(render.homePage(content));
       if (parts[0] === 'compendium' && parts.length === 1) return page(render.compendiumPage(content));
       if (parts[0] === 'search' && parts.length === 1) {

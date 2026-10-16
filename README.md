@@ -117,6 +117,24 @@ This enables the APIs, creates the `duskbloods` image repo and a `duskbloods-run
 site to run as, and gives the deploy account only `run.admin`, write access to that one repo, and permission to run
 services as `duskbloods-runtime`.
 
+## SEO
+
+Every page gets a unique title and meta description built from the sheet, an absolute canonical URL, Open Graph and
+Twitter cards, and JSON-LD (WebSite + VideoGame, BreadcrumbList, CollectionPage/ItemList, ItemPage, BlogPosting).
+`/sitemap.xml` lists every indexable canonical page (with portraits as image entries), and `/robots.txt` points to it.
+
+- **Duplicates:** an entry whose content is a subset of a fuller entry with the same name (Albert in Skills vs
+  Characters) declares the fuller page canonical and is left out of the sitemap.
+- **Placeholders:** text like `TODO` in the sheet is never shown or used as a description; descriptions are built
+  from the entries instead. Fill those cells in for the best results.
+- **Search and 404 pages** are `noindex, follow`. Trailing-slash URLs 301 to the version without.
+- **Performance:** brotli/gzip, fingerprinted static assets cached for a year, self-hosted fonts, LCP image preloaded.
+- **Domain:** set `SITE_URL` (CI repository variable, or env for `./deploy.sh deploy`) to the public origin, e.g.
+  `https://duskbloods.build`. Without it, canonical URLs use the host the request came in on.
+
+Audit a running copy with the `seo-max` skill's crawler:
+`python3 -I ~/.claude/skills/seo-max/scripts/seo_audit.py http://localhost:8080 --fail-on warn`.
+
 ## Endpoints
 
 `/` home · `/compendium` · `/c/:category` · `/c/:category/:entry` · `/updates` · `/updates/:post` · `/search?q=` ·
