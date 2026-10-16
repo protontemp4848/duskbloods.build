@@ -5,7 +5,8 @@
 #   ./deploy.sh build     build the production image (runs tests first)
 #   ./deploy.sh local     build and run the container at http://localhost:8080 (live sheet; SAMPLE=1 for sample data)
 #   ./deploy.sh smoke     build, start the container, check every page type responds, stop it
-#   ./deploy.sh setup     one-time: enable APIs and create the Artifact Registry repo
+#   ./deploy.sh setup     one-time: enable APIs, create the image repo and runtime account; with DEPLOYER_SA set,
+#                         also grant that account what CI needs to push and deploy
 #   ./deploy.sh push      build and push the image to Artifact Registry
 #   ./deploy.sh deploy    deploy the pushed image to Cloud Run
 #   ./deploy.sh all       test, build, smoke, push and deploy
@@ -15,9 +16,12 @@
 #   SERVICE     (default: duskbloods)                REPO     (default: duskbloods)
 #   SHEET_ID    (default: the Duskbloods sheet)      CACHE_SECONDS (default: 60)
 #   PORT        local port for `local` (default: 8080)
+#   RUNTIME_SA  account the service runs as (default: duskbloods-runtime@PROJECT_ID, which has no roles)
+#   DEPLOYER_SA account CI deploys as, for `setup` to grant roles to (e.g. duskbloods-build-sa@PROJECT_ID)
 #   DRY_RUN=1   print the gcloud/docker commands for setup/push/deploy instead of running them
 set -euo pipefail
 cd "$(dirname "$0")"
+# shellcheck source=/dev/null
 [[ -f .env.deploy ]] && set -a && source .env.deploy && set +a
 
 SERVICE="${SERVICE:-duskbloods}"
@@ -40,6 +44,7 @@ cloud_config() {
   PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null || true)}"
   [[ -n "$PROJECT_ID" ]] || die "No GCP project. Set PROJECT_ID or run: gcloud config set project <id>"
   REGISTRY="${REGION}-docker.pkg.dev"
+  RUNTIME_SA="${RUNTIME_SA:-duskbloods-runtime@${PROJECT_ID}.iam.gserviceaccount.com}"
   IMAGE="${REGISTRY}/${PROJECT_ID}/${REPO}/${SERVICE}"
 }
 
@@ -80,6 +85,7 @@ smoke_check() {
   local label="$1"; shift
   local name="${SERVICE}-smoke-$$" port
   docker run -d --rm --name "$name" -p 127.0.0.1::8080 "$@" "$LOCAL_IMAGE" >/dev/null
+  # shellcheck disable=SC2064 # expand $name now: it's local and gone by the time the trap fires
   trap "docker rm -f $name >/dev/null 2>&1 || true" RETURN
   port="$(docker port "$name" 8080 | head -1 | sed 's/.*://')"
   local base="http://127.0.0.1:${port}"
@@ -93,7 +99,8 @@ smoke_check() {
   }
   log "Smoke test (${label}) on $base"
   echo "  healthz: $(curl -s "$base/healthz")"
-  for spec in "${SMOKE_PATHS[@]}"; do check ${spec}; done
+  local path want
+  for spec in "${SMOKE_PATHS[@]}"; do read -r path want <<<"$spec"; check "$path" "$want"; done
   [[ $failures == 0 ]] || { docker logs "$name" | tail -20; die "Smoke test (${label}) failed"; }
 }
 
@@ -108,23 +115,43 @@ cmd_smoke() {
   log "Smoke tests passed"
 }
 
+# Idempotent: safe to re-run; existing resources and bindings are left as they are.
 cmd_setup() {
   cloud_config
   log "Enabling Cloud Run + Artifact Registry APIs in ${PROJECT_ID}"
   run gcloud services enable run.googleapis.com artifactregistry.googleapis.com --project "$PROJECT_ID"
-  if gcloud artifacts repositories describe "$REPO" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+
+  if [[ "${DRY_RUN:-}" != 1 ]] && gcloud artifacts repositories describe "$REPO" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
     log "Artifact Registry repo ${REPO} already exists"
   else
     log "Creating Artifact Registry repo ${REPO} in ${REGION}"
-    run gcloud artifacts repositories create "$REPO" --repository-format docker --location "$REGION" --project "$PROJECT_ID"
+    run gcloud artifacts repositories create "$REPO" --repository-format docker --location "$REGION" --project "$PROJECT_ID" \
+      --description "duskbloods.build images"
   fi
-  run gcloud auth configure-docker "$REGISTRY" --quiet
+
+  # The site only reads a public sheet, so it runs as an account with no roles at all.
+  if [[ "${DRY_RUN:-}" != 1 ]] && gcloud iam service-accounts describe "$RUNTIME_SA" --project "$PROJECT_ID" >/dev/null 2>&1; then
+    log "Runtime account ${RUNTIME_SA} already exists"
+  else
+    log "Creating runtime account ${RUNTIME_SA} (no roles)"
+    run gcloud iam service-accounts create "${RUNTIME_SA%%@*}" --project "$PROJECT_ID" --display-name "duskbloods.build Cloud Run runtime"
+  fi
+
+  if [[ -n "${DEPLOYER_SA:-}" ]]; then
+    log "Granting ${DEPLOYER_SA} what CI needs: deploy Cloud Run, push to ${REPO} only, run the service as ${RUNTIME_SA%%@*} only"
+    run gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:${DEPLOYER_SA}" --role roles/run.admin --condition None --quiet
+    run gcloud artifacts repositories add-iam-policy-binding "$REPO" --location "$REGION" --project "$PROJECT_ID" \
+      --member "serviceAccount:${DEPLOYER_SA}" --role roles/artifactregistry.writer --quiet
+    run gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" --project "$PROJECT_ID" \
+      --member "serviceAccount:${DEPLOYER_SA}" --role roles/iam.serviceAccountUser --quiet
+  fi
 }
 
 cmd_push() {
   cloud_config
   cmd_build
   log "Pushing ${IMAGE}:${TAG}"
+  run gcloud auth configure-docker "$REGISTRY" --quiet
   run docker tag "$LOCAL_IMAGE" "${IMAGE}:${TAG}"
   run docker tag "$LOCAL_IMAGE" "${IMAGE}:latest"
   run docker push "${IMAGE}:${TAG}"
@@ -138,6 +165,7 @@ cmd_deploy() {
     --project "$PROJECT_ID" \
     --region "$REGION" \
     --image "${IMAGE}:${TAG}" \
+    --service-account "$RUNTIME_SA" \
     --allow-unauthenticated \
     --port 8080 \
     --cpu 1 --memory 256Mi \
@@ -155,5 +183,5 @@ case "${1:-}" in
   push) cmd_push ;;
   deploy) cmd_deploy ;;
   all) cmd_smoke && cmd_push && cmd_deploy ;;
-  *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

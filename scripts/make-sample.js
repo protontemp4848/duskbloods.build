@@ -13,6 +13,12 @@ const tabs = [
     ['tagline', 'Sample data. Every entry here is a placeholder, not real game information.'],
     ['release_date', { date: 46387 }],
   ] },
+  { name: '_pages', rows: [
+    ['Page', 'Description'],
+    ['Compendium', 'Sample intro for the compendium page. Every tab in the sheet becomes a category below.'],
+    ['Updates', 'Sample intro for the updates page.'],
+    ['Weapons', 'Sample category intro. Click a column header to sort; numeric columns sort by value.'],
+  ] },
   { name: 'News', rows: [
     ['Date', 'Title', 'Summary', 'Body'],
     [{ date: 46310 }, 'Sample update: compendium structure', 'Categories now come straight from the sheet tabs.', 'Each tab is a category.\n\nEach row is an entry.'],

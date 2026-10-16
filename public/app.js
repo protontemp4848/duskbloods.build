@@ -1,10 +1,10 @@
-// Category pages: text filter, tag select and live count.
+// Category pages (grid, list or table): text filter, tag select and live count.
 const filters = document.querySelector('[data-filters]');
 if (filters) {
   const text = filters.querySelector('[data-filter-text]');
   const tag = filters.querySelector('[data-filter-tag]');
   const count = filters.querySelector('[data-count]');
-  const rows = [...document.querySelectorAll('[data-entries] tbody tr')];
+  const rows = [...document.querySelectorAll('main [data-entry]')];
   const empty = document.querySelector('[data-empty]');
 
   const apply = () => {
@@ -57,9 +57,12 @@ function onBrokenImage(img) {
   if (entry) {
     entry.classList.remove('entry--image');
     img.closest('figure')?.remove();
-  } else if (img.classList.contains('masthead-img')) {
-    img.closest('.masthead')?.classList.remove('masthead--image');
-    img.remove();
+  } else if (img.parentElement?.classList.contains('portrait')) {
+    const blank = document.createElement('span');
+    blank.className = 'portrait-blank';
+    blank.setAttribute('aria-hidden', 'true');
+    blank.textContent = img.parentElement.querySelector('strong')?.textContent.slice(0, 1) ?? '';
+    img.replaceWith(blank);
   } else {
     img.remove();
   }
@@ -67,4 +70,19 @@ function onBrokenImage(img) {
 for (const img of document.querySelectorAll('main img')) {
   if (img.complete && img.naturalWidth === 0) onBrokenImage(img);
   else img.addEventListener('error', () => onBrokenImage(img), { once: true });
+}
+
+// "/" jumps to the search box (the category filter when there is one), like most wikis.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/^(input|select|textarea)$/i.test(document.activeElement?.tagName ?? '')) return;
+  const box = document.querySelector('[data-filter-text]') ?? document.querySelector('[data-search-box]');
+  if (box) { e.preventDefault(); box.focus(); }
+});
+
+// On narrow screens the category tabs scroll sideways; start with the current one in view.
+const currentTab = document.querySelector('.tabs [aria-current]');
+if (currentTab) {
+  const tabs = currentTab.parentElement;
+  tabs.scrollLeft = currentTab.offsetLeft - tabs.offsetLeft - 16;
 }

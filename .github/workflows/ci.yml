@@ -1,0 +1,86 @@
+# Tests every push and pull request; deploys main to Cloud Run.
+#
+# Repository secrets:
+#   GOOGLE_CLOUD_PROJECT       GCP project id (duskbloods-build)
+#   CLOUD_RUN_NAME             Cloud Run service name
+#   CLOUD_RUN_SERVICE_ACCOUNT  JSON key of the deploy account (duskbloods-build-sa)
+# Optional repository variables: REGION (default europe-west1), SHEET_ID (default: the Duskbloods sheet).
+# One-time GCP setup: DEPLOYER_SA=<deploy account email> ./deploy.sh setup
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit and HTTP tests
+        run: npm test
+      # Builds the image (running the tests again inside it), starts the container and checks every page type,
+      # against sample data and against the live sheet.
+      - name: Docker build and smoke test
+        run: ./deploy.sh smoke
+
+  deploy:
+    needs: test
+    # Only main deploys; pull requests and other branches stop after tests.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Never run two deploys at once; a newer push waits for the current one rather than cancelling it mid-rollout.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      PROJECT_ID: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+      SERVICE: ${{ secrets.CLOUD_RUN_NAME }}
+      REGION: ${{ vars.REGION || 'europe-west1' }}
+      SHEET_ID: ${{ vars.SHEET_ID }} # empty -> deploy.sh's built-in sheet id
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        env:
+          HAS_KEY: ${{ secrets.CLOUD_RUN_SERVICE_ACCOUNT != '' }}
+        run: |
+          missing=""
+          [ -n "$PROJECT_ID" ] || missing="$missing GOOGLE_CLOUD_PROJECT"
+          [ -n "$SERVICE" ] || missing="$missing CLOUD_RUN_NAME"
+          [ "$HAS_KEY" = "true" ] || missing="$missing CLOUD_RUN_SERVICE_ACCOUNT"
+          if [ -n "$missing" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.CLOUD_RUN_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push image
+        run: ./deploy.sh push
+
+      - name: Deploy to Cloud Run
+        run: ./deploy.sh deploy
+
+      - name: Check the live site
+        run: |
+          url=$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
+          echo "Live at $url"
+          for path in /healthz / /compendium /updates; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --retry 5 --retry-all-errors --retry-delay 3 "$url$path")
+            echo "$code $path"
+            [ "$code" = "200" ] || { echo "::error::$path returned $code"; exit 1; }
+          done
+          curl -sf "$url/healthz"
+          echo "### Deployed to $url" >> "$GITHUB_STEP_SUMMARY"

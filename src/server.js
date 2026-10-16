@@ -25,19 +25,42 @@ const SECURITY_HEADERS = {
 export function search(content, q) {
   const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
+  const phrase = terms.join(' ');
   const results = [];
   for (const category of content.categories) {
     for (const item of category.items) {
-      const hay = [item.title, item.summary, item.body, ...item.tags, ...item.fields.map((f) => f.value)].join(' ').toLowerCase();
-      if (terms.every((t) => hay.includes(t))) {
-        const title = item.title.toLowerCase();
-        // Rank: every term in the title, then some term in the title, then matches in other text.
-        const rank = terms.every((t) => title.includes(t)) ? 2 : terms.some((t) => title.includes(t)) ? 1 : 0;
-        results.push({ item, category: category.name, href: `/c/${category.slug}/${item.slug}`, rank });
-      }
+      // [label, text, isName, snippet]: names (stats, ability names) outrank prose when they hold the phrase.
+      const parts = [
+        ['', item.summary, false], ['', item.body, false], ...item.tags.map((t) => ['', t, true]),
+        ...item.fields.map((f) => [f.label, f.value, true]),
+        ...item.abilities.flatMap((a) => [[a.label, a.name, true, `${a.name} — ${a.text}`], [a.label, a.text, false, `${a.name} — ${a.text}`]]),
+        ...item.sections.map((s) => [s.label, s.value, false]),
+      ].filter(([, v]) => v);
+      const hay = [item.title, ...parts.map(([, v]) => v)].join(' ').toLowerCase();
+      if (!terms.every((t) => hay.includes(t))) continue;
+
+      const score = ([, v, isName]) => {
+        const text = v.toLowerCase();
+        return (text.includes(phrase) ? 100 : 0) + terms.filter((t) => text.includes(t)).length * 10 + (isName ? 5 : 0);
+      };
+      const best = parts.reduce((a, b) => (score(b) > score(a) ? b : a), parts[0]);
+      const title = item.title.toLowerCase();
+      const rank =
+        terms.every((t) => title.includes(t)) ? 5
+        : best && best[2] && best[1].toLowerCase().includes(phrase) ? 4
+        : hay.includes(phrase) ? 3
+        : terms.some((t) => title.includes(t)) ? 2 : 1;
+      const snippet = rank === 5 || !best ? item.summary : `${best[0] ? `${best[0]}: ` : ''}${best[3] ?? best[1]}`;
+      results.push({ item: { ...item, summary: snippet }, category: category.name, href: `/c/${category.slug}/${item.slug}`, rank, weight: item.fields.length + item.abilities.length + (item.image ? 2 : 0) });
     }
   }
-  return results.sort((a, b) => b.rank - a.rank).slice(0, 100);
+  // Best rank first; between equals, the fuller entry. The same name + match from a duplicate tab is dropped.
+  results.sort((a, b) => b.rank - a.rank || b.weight - a.weight);
+  const seen = new Set();
+  return results.filter((r) => {
+    const key = `${r.item.title.toLowerCase()}|${r.item.summary}`;
+    return seen.has(key) ? false : seen.add(key);
+  }).slice(0, 100);
 }
 
 export function createApp(source) {

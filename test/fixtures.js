@@ -10,6 +10,12 @@ export const sampleTabs = [
     ['hero_image', 'javascript:alert(1)'],
     ['discord_url', 'https://discord.gg/example'],
   ] },
+  { name: '_pages', rows: [
+    ['Page', 'Description'],
+    ['Compendium', 'Every <entry> catalogued.'],
+    ['UPDATES', 'News from the dusk.'],
+    ['bloodsworn', 'The playable hunters.\n\nSecond paragraph.'],
+  ] },
   { name: 'News', rows: [
     ['date', 'title', 'summary', 'body'],
     [{ date: 46300 }, 'Older post', 'First summary', 'Line one\n\nLine two'],
