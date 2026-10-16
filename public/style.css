@@ -144,6 +144,9 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 .stats dd { margin: 0; white-space: pre-line; }
 .prose { max-width: 66ch; }
 .prose p + p { margin-top: 1em; }
+.legal h2 { font: 500 24px/1.2 var(--serif); margin: 2em 0 .6em; }
+.legal ul { padding-left: 1.2em; }
+.legal li + li, .legal ul { margin-top: 1em; }
 .source { font-size: 14px; color: var(--muted); }
 
 .pager { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 64px; border-top: 1px solid var(--line); padding-top: 16px; max-width: 1008px; }

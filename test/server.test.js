@@ -137,3 +137,19 @@ test('ads.txt authorises the AdSense publisher', async () => {
   assert.match(r.type, /^text\/plain/);
   assert.equal(r.text, 'google.com, pub-3267360964563410, DIRECT, f08c47fec0942fa0\n');
 });
+
+test('privacy policy has the AdSense disclosures and is linked from every page', async () => {
+  const r = await get('/privacy');
+  assert.equal(r.status, 200);
+  assert.match(r.text, /<h1>Privacy policy<\/h1>/);
+  assert.match(r.text, /Third-party vendors, including Google, use cookies to serve ads based on your prior visits/);
+  assert.match(r.text, /Google’s use of advertising cookies enables it and its partners to serve ads/);
+  assert.match(r.text, /href="https:\/\/myadcenter\.google\.com\/"/);
+  assert.match(r.text, /href="https:\/\/www\.aboutads\.info\/choices\/"/);
+  assert.match(r.text, /href="https:\/\/policies\.google\.com\/technologies\/partner-sites"/);
+  assert.match(r.text, /<link rel="canonical" href="[^"]*\/privacy">/);
+  assert.doesNotMatch(r.text, /noindex/);
+  for (const path of ['/', '/compendium', '/updates', '/c/weapons', '/nope']) {
+    assert.match((await get(path)).text, /<footer[\s\S]*<a href="\/privacy">Privacy<\/a>/, path);
+  }
+});

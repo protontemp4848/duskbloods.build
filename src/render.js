@@ -129,7 +129,7 @@ ${seo.jsonLdTag([...seo.siteGraph(content), ...(meta.jsonld ?? [])])}
 <main class="wrap">${body}${reportBox(content, meta.reportLabel ?? meta.title)}</main>
 <footer class="foot">
   <div class="wrap foot-inner">
-    <p>Unofficial fan site. Not affiliated with FromSoftware or Nintendo.${site.discord_url ? ` <a href="${esc(site.discord_url)}" rel="noopener">Discord</a>` : ''}</p>
+    <p>Unofficial fan site. Not affiliated with FromSoftware or Nintendo. <a href="/privacy">Privacy</a>${site.discord_url ? ` <a href="${esc(site.discord_url)}" rel="noopener">Discord</a>` : ''}</p>
     <p class="mono">Synced ${esc(content.fetchedAt.slice(0, 16).replace('T', ' '))} UTC</p>
   </div>
 </footer>
@@ -476,6 +476,43 @@ export function postPage(content, post) {
       pager: pagerFor(content.news, content.news.indexOf(post), (p) => `/updates/${esc(p.slug)}`),
     }),
   });
+}
+
+// Required for AdSense: says what Google's ad cookies do and how to opt out. Edit PRIVACY_UPDATED when the text changes.
+const PRIVACY_UPDATED = '2026-10-16';
+
+export function privacyPage(content) {
+  const { site } = content;
+  const link = (href, text) => `<a href="${href}" rel="noopener">${text}</a>`;
+  const body = `<header class="page-head"><h1>Privacy policy</h1><p class="mono muted">Last updated ${formatDate(PRIVACY_UPDATED)}</p></header>
+<div class="prose legal">
+<p>${esc(site.title)} is an unofficial fan site. This page explains what information is collected when you visit it, and by whom.</p>
+
+<h2>Advertising</h2>
+<p>This site shows ads served by Google AdSense. Third-party vendors, including Google, use cookies to serve ads based on your prior visits to this website or other websites.</p>
+<p>Google’s use of advertising cookies enables it and its partners to serve ads to you based on your visit to this site and/or other sites on the Internet. ${link('https://policies.google.com/technologies/partner-sites', 'How Google uses information from sites that use its services')}.</p>
+<p>You can opt out of personalised advertising in ${link('https://myadcenter.google.com/', 'Google’s My Ad Center')}, and opt out of some third-party vendors’ use of cookies for personalised advertising at ${link('https://www.aboutads.info/choices/', 'aboutads.info')} or, in Europe, ${link('https://www.youronlinechoices.eu/', 'youronlinechoices.eu')}.</p>
+<p>If you are in the European Economic Area, the UK or Switzerland, you are asked for consent before personalised ads or ad cookies are used, and you can change your choice at any time from the privacy link in that message.</p>
+
+<h2>What this site itself collects</h2>
+<ul>
+<li><strong>No accounts, no cookies of our own, no analytics.</strong> The site sets no cookies itself; any cookies come from the ad services above.</li>
+<li><strong>Server logs.</strong> Like any website, our hosting provider (Google Cloud) records standard request details such as your IP address, the page requested, the time and your browser’s user agent. These are used to keep the site running and secure and are deleted automatically after a limited time.</li>
+<li><strong>“Report a problem” form.</strong> If you send a report, the page it was sent from, the entry name and your message are stored in a Google Sheet that the site’s editors read. We don’t ask for your name or email, so please don’t include personal details in the message. Your IP address is held in memory for up to 10 minutes to stop spam and is not stored with the report.</li>
+<li><strong>Images from other sites.</strong> Some pictures may be loaded from other websites, which then receive the usual request details from your browser.</li>
+</ul>
+
+<h2>Changes and contact</h2>
+<p>If this policy changes, the date at the top of this page will change too. Questions or requests about your data can be sent with the “Report a problem” form at the bottom of any page${site.discord_url ? ` or on our ${link(esc(site.discord_url), 'Discord')}` : ''}.</p>
+</div>`;
+  const meta = {
+    title: seo.fullTitle('Privacy Policy', site),
+    description: `How ${site.title} and its advertising partners handle cookies and data.`,
+    path: '/privacy',
+    reportLabel: 'Privacy policy',
+    jsonld: [seo.breadcrumbs(content.origin, [['Privacy policy']])],
+  };
+  return layout({ content, meta, body });
 }
 
 export function searchPage(content, q, results) {

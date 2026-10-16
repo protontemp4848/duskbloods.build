@@ -36,9 +36,10 @@ test('sitemap lists every indexable canonical page and nothing else', async () =
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-type'), /application\/xml/);
   const urls = await sitemapUrls();
-  // 3 top-level + 5 categories + 6 characters + 20 items + 1 post. Albert & co in Weapons/Skills/Aspects
+  // 4 top-level (incl. /privacy) + 5 categories + 6 characters + 20 items + 1 post. Albert & co in Weapons/Skills/Aspects
   // duplicate their Characters pages, so only the Characters versions are listed.
-  assert.equal(urls.length, 35);
+  assert.equal(urls.length, 36);
+  assert.ok(urls.includes(`${ORIGIN}/privacy`));
   assert.ok(urls.every((u) => u.startsWith(`${ORIGIN}/`)));
   assert.ok(urls.includes(`${ORIGIN}/c/characters/albert`));
   assert.ok(!urls.includes(`${ORIGIN}/c/skills/albert`));

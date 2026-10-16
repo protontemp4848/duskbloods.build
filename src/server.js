@@ -200,6 +200,7 @@ export function createApp(source, { report = null } = {}) {
 
       if (url.pathname === '/api/content') return send(200, JSON.stringify(raw), 'application/json', { 'Cache-Control': 'public, max-age=60' });
       if (parts.length === 0) return page(render.homePage(content));
+      if (url.pathname === '/privacy') return page(render.privacyPage(content));
       if (parts[0] === 'compendium' && parts.length === 1) return page(render.compendiumPage(content));
       if (parts[0] === 'search' && parts.length === 1) {
         const q = (url.searchParams.get('q') ?? '').slice(0, 100);

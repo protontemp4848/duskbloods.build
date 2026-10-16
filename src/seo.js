@@ -149,7 +149,7 @@ const xmlEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<':
 /** Every indexable canonical page. lastmod only where the sheet has a real date (posts). */
 export function sitemapXml(content) {
   const { origin } = content;
-  const urls = [{ path: '/' }, { path: '/compendium' }, { path: '/updates' }];
+  const urls = [{ path: '/' }, { path: '/compendium' }, { path: '/updates' }, { path: '/privacy' }];
   for (const category of content.categories) {
     urls.push({ path: `/c/${category.slug}` });
     const dupes = canonicalEntries(content);
