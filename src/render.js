@@ -3,6 +3,9 @@ import { badgeHtml } from './icons.js';
 import { asset } from './assets.js';
 import * as seo from './seo.js';
 
+// Google AdSense publisher ID: loads the ad script on every page and backs /ads.txt.
+export const ADSENSE_CLIENT = 'ca-pub-3267360964563410';
+
 export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
@@ -111,6 +114,7 @@ ${meta.lcpImage ? `${new URL(meta.lcpImage, origin || 'http://localhost').origin
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="${asset('apple-touch-icon.png')}">
 ${seo.jsonLdTag([...seo.siteGraph(content), ...(meta.jsonld ?? [])])}
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}" crossorigin="anonymous"></script>
 </head>
 <body>
 <header class="bar">

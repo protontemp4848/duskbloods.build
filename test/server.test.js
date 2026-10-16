@@ -24,7 +24,8 @@ const get = async (path) => {
 test('home page renders site, countdown, news and categories', async () => {
   const r = await get('/');
   assert.equal(r.status, 200);
-  assert.match(r.csp, /script-src 'self'/);
+  assert.match(r.csp, /script-src 'self' https:;/);
+  assert.match(r.text, /<script async src="https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-3267360964563410" crossorigin="anonymous"><\/script>\n<\/head>/);
   assert.match(r.text, /<title>The Duskbloods Wiki: Bloodsworn, Weapons, Search &amp; More<\/title>/);
   assert.match(r.text, /Sample tagline &lt;b&gt;escaped&lt;\/b&gt;/);
   assert.match(r.text, /<p class="release mono">Release 31 Dec 2026 · <strong>\d+<\/strong> days to go<\/p>/);
@@ -128,4 +129,11 @@ test('_pages descriptions render on their pages, escaped, and become the meta de
 test('non-GET methods are rejected', async () => {
   const res = await fetch(base + '/', { method: 'POST' });
   assert.equal(res.status, 405);
+});
+
+test('ads.txt authorises the AdSense publisher', async () => {
+  const r = await get('/ads.txt');
+  assert.equal(r.status, 200);
+  assert.match(r.type, /^text\/plain/);
+  assert.equal(r.text, 'google.com, pub-3267360964563410, DIRECT, f08c47fec0942fa0\n');
 });

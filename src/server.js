@@ -31,9 +31,13 @@ const SECURITY_HEADERS = {
   'Content-Security-Policy': [
     "default-src 'self'",
     "img-src 'self' https: data:",
-    "style-src 'self'",
+    // AdSense adds <style> blocks and loads scripts and ad frames from many Google hosts (country-specific ones too),
+    // so those are any https origin; inline scripts stay blocked.
+    "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
-    "script-src 'self'",
+    "script-src 'self' https:",
+    "frame-src https:",
+    "connect-src 'self' https:",
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
@@ -189,6 +193,7 @@ export function createApp(source, { report = null } = {}) {
         return file ? send(200, file.data, file.type, { 'Cache-Control': YEAR }) : send(404, 'Not found', 'text/plain');
       }
       if (url.pathname === '/robots.txt') return send(200, robotsTxt(content.origin), 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
+      if (url.pathname === '/ads.txt') return send(200, `google.com, ${render.ADSENSE_CLIENT.replace(/^ca-/, '')}, DIRECT, f08c47fec0942fa0\n`, 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
       if (url.pathname === '/sitemap.xml') return send(200, sitemapXml(content), 'application/xml; charset=utf-8', { 'Cache-Control': 'public, max-age=600' });
       const page = (html) => send(200, html, undefined, { 'Cache-Control': 'public, max-age=60' });
       const notFound = () => send(404, render.notFoundPage(content));
