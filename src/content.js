@@ -209,10 +209,16 @@ function readPagesTab(rows) {
 }
 
 // Portrait grid when most entries have pictures and there's no long prose (prose reads better as a list);
-// stacked list when there's prose or abilities; else a table.
-function autoView({ items, abilityLabels }) {
+// stacked list when there's prose or abilities; else a table. A grid card shows only the name and first stats,
+// so abilities with no stats (e.g. a Skills tab with the character's portrait) are a list, with the picture as an icon.
+// Likewise when the pictures are mostly an earlier tab's (a Weapons tab reusing the Characters portraits): one gallery is enough.
+function autoView({ items, fields, abilityLabels }, reused) {
   const prose = items.some((i) => i.sections.length);
-  if (items.length && !prose && items.filter((i) => i.image).length >= items.length / 2) return 'grid';
+  const onlyAbilities = abilityLabels.length && !fields.length;
+  const pictured = items.filter((i) => i.image);
+  const borrowed = pictured.filter((i) => reused.has(i.image)).length > pictured.length / 2;
+  if (items.length && !prose && !onlyAbilities && !borrowed && pictured.length >= items.length / 2) return 'grid';
+  if (borrowed) return 'list';
   if (abilityLabels.length || items.some((i) => i.sections.length)) return 'list';
   return 'table';
 }
@@ -246,10 +252,12 @@ export function buildContent(tabs, { fetchedAt = new Date() } = {}) {
     if (!parsed.columns.length) continue; // blank tab, e.g. the default "Sheet1"
     categories.push({ name, slug: uniqueSlug(slugify(name), usedSlugs), ...parsed });
   }
+  const seenImages = new Set(); // pictures used by earlier tabs, in sheet order
   categories.forEach((c, i) => {
     const page = pages.get(normKey(c.name));
     c.description = page?.description ?? '';
-    c.view = page?.view || autoView(c);
+    c.view = page?.view || autoView(c, seenImages);
+    for (const item of c.items) if (item.image) seenImages.add(item.image);
     c.badge = resolveBadge(c.name, page, i);
   });
   const content = {

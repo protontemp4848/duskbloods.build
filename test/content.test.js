@@ -102,8 +102,16 @@ test('views: auto grid/list/table, overridable from _pages', () => {
     { name: 'Abilities', hidden: false, rows: [['Name', 'Skill', 'Skill Description'], ['A', 'S', 'D']] },
     { name: 'Stats', hidden: false, rows: [['Name', 'Damage'], ['A', '1']] },
     { name: 'Forced', hidden: false, rows: [['Name', 'Damage'], ['A', '1']] },
+    // Pictures plus stats and abilities (a character roster) is still a grid...
+    { name: 'Roster', hidden: false, rows: [['Name', 'Portrait', 'Weapon', 'Skill', 'Skill Description'], ['A', 'https://x.test/r.png', 'W', 'S', 'D']] },
+    // ...but pictures plus abilities and nothing else would be a wall of names, so it's a list.
+    { name: 'Pictured Abilities', hidden: false, rows: [['Name', 'Portrait', 'Skill', 'Skill Description'], ['A', img, 'S', 'D'], ['B', img, 'S', 'D']] },
+    // Reusing an earlier tab's pictures (each character's weapons, with their portrait) is a list of icons, not a second gallery.
+    { name: 'Loadouts', hidden: false, rows: [['Name', 'Portrait', 'Weapon'], ['A', img, 'W'], ['B', img, 'W']] },
+    { name: 'Own Pictures', hidden: false, rows: [['Name', 'Portrait', 'Weapon'], ['A', 'https://x.test/b.png', 'W']] },
   ]);
-  assert.deepEqual(c.categories.map((x) => [x.name, x.view]), [['Portraits', 'grid'], ['Abilities', 'list'], ['Stats', 'table'], ['Forced', 'grid']]);
+  assert.deepEqual(c.categories.map((x) => [x.name, x.view]),
+    [['Portraits', 'grid'], ['Abilities', 'list'], ['Stats', 'table'], ['Forced', 'grid'], ['Roster', 'grid'],['Pictured Abilities', 'list'], ['Loadouts', 'list'], ['Own Pictures', 'grid']]);
   assert.equal(c.categories[0].items[0].image, img, '"Portrait" column is the image');
 });
 
