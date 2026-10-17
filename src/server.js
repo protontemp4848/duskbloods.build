@@ -7,6 +7,7 @@ import * as render from './render.js';
 import { assetHash } from './assets.js';
 import { originFor, sitemapXml, robotsTxt } from './seo.js';
 import { parseFormUrl, createReporter, isSitePath } from './feedback.js';
+import { pageview, logPageview } from './analytics.js';
 
 const STATIC_DIR = new URL('../public/', import.meta.url);
 const STATIC_TYPES = {
@@ -106,7 +107,8 @@ function readForm(req, max = 8192) {
 }
 
 // report: the problem-report submitter from feedback.js, or null when FEEDBACK_FORM_URL isn't set (form hidden).
-export function createApp(source, { report = null } = {}) {
+// track: receives a page view event from analytics.js for each page a person loads, or null to count nothing.
+export function createApp(source, { report = null, track = null } = {}) {
   return async function handler(req, res) {
     const accepts = String(req.headers['accept-encoding'] ?? '');
     const encoding = /\bbr\b/.test(accepts) ? 'br' : /\bgzip\b/.test(accepts) ? 'gzip' : '';
@@ -195,8 +197,18 @@ export function createApp(source, { report = null } = {}) {
       if (url.pathname === '/robots.txt') return send(200, robotsTxt(content.origin), 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
       if (url.pathname === '/ads.txt') return send(200, `google.com, ${render.ADSENSE_CLIENT.replace(/^ca-/, '')}, DIRECT, f08c47fec0942fa0\n`, 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });
       if (url.pathname === '/sitemap.xml') return send(200, sitemapXml(content), 'application/xml; charset=utf-8', { 'Cache-Control': 'public, max-age=600' });
-      const page = (html) => send(200, html, undefined, { 'Cache-Control': 'public, max-age=60' });
-      const notFound = () => send(404, render.notFoundPage(content));
+      const view = (status, extra) => {
+        const event = track && pageview(req, url.pathname.slice(0, 200), status, content.origin, extra);
+        if (event) track(event);
+      };
+      const page = (html, extra) => {
+        view(200, extra);
+        return send(200, html, undefined, { 'Cache-Control': 'public, max-age=60' });
+      };
+      const notFound = () => {
+        view(404);
+        return send(404, render.notFoundPage(content));
+      };
 
       if (url.pathname === '/api/content') return send(200, JSON.stringify(raw), 'application/json', { 'Cache-Control': 'public, max-age=60' });
       if (parts.length === 0) return page(render.homePage(content));
@@ -204,7 +216,8 @@ export function createApp(source, { report = null } = {}) {
       if (parts[0] === 'compendium' && parts.length === 1) return page(render.compendiumPage(content));
       if (parts[0] === 'search' && parts.length === 1) {
         const q = (url.searchParams.get('q') ?? '').slice(0, 100);
-        return page(render.searchPage(content, q, search(content, q)));
+        const results = search(content, q);
+        return page(render.searchPage(content, q, results), { q, results: results.length });
       }
       if (parts[0] === 'updates') {
         if (parts.length === 1) return page(render.updatesPage(content));
@@ -237,7 +250,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.env.FEEDBACK_FORM_URL && !form) {
     console.error(JSON.stringify({ severity: 'WARNING', message: 'FEEDBACK_FORM_URL is not a pre-filled Google Form link with PAGE, ENTRY and MESSAGE; problem reports are disabled' }));
   }
-  const server = createServer(createApp(source, { report: form ? createReporter(form) : null }));
+  const server = createServer(createApp(source, { report: form ? createReporter(form) : null, track: logPageview }));
   server.listen(port, () => console.log(JSON.stringify({ severity: 'INFO', message: `Listening on :${port}` })));
   // Warm the cache so the first visitor doesn't wait on Google.
   source.get().catch(() => {});
