@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, gzipSync, constants as zlibConstants } from 'node:zlib';
-import { createSource } from './sheet.js';
+import { loadSource } from './sheet.js';
 import * as render from './render.js';
 import { assetHash } from './assets.js';
 import { originFor, sitemapXml, robotsTxt } from './seo.js';
@@ -241,10 +241,10 @@ export function createApp(source, { report = null, track = null } = {}) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT ?? 8080);
-  const source = createSource({
-    sheetId: process.env.SHEET_ID,
-    file: process.env.SHEET_FILE,
-    ttlMs: Number(process.env.CACHE_SECONDS ?? 60) * 1000,
+  // Load the sheet baked into the image before listening; without it, exit so the health check never passes.
+  const source = await loadSource({ file: process.env.SHEET_FILE }).catch((err) => {
+    console.error(JSON.stringify({ severity: 'ERROR', message: `Sheet load failed: ${err.message}` }));
+    process.exit(1);
   });
   const form = parseFormUrl(process.env.FEEDBACK_FORM_URL);
   if (process.env.FEEDBACK_FORM_URL && !form) {
@@ -252,8 +252,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const server = createServer(createApp(source, { report: form ? createReporter(form) : null, track: logPageview }));
   server.listen(port, () => console.log(JSON.stringify({ severity: 'INFO', message: `Listening on :${port}` })));
-  // Warm the cache so the first visitor doesn't wait on Google.
-  source.get().catch(() => {});
   // server.close() alone waits on browsers' keep-alive/preconnect sockets indefinitely, so drop idle
   // connections now, give in-flight requests 3s (Cloud Run allows 10s after SIGTERM), and exit on a second signal.
   let stopping = false;

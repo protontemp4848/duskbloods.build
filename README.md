@@ -2,13 +2,14 @@
 
 An unofficial compendium for *The Duskbloods*, rendered from a Google Sheet and served from Cloud Run.
 
-Edit the sheet, and the site picks up the change within `CACHE_SECONDS` (default 60s). No redeploy needed.
+The sheet is downloaded once, when the image is built, and baked into it. The running site never contacts Google,
+so **sheet edits go live with the next deploy** (push to `main`, or run the CI workflow manually).
 
 **Sheet:** https://docs.google.com/spreadsheets/d/15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA/edit
 
 ## How the sheet maps to the site
 
-The sheet must be shared as **Anyone with the link → Viewer**. The app downloads it as one `.xlsx` export,
+The sheet must be shared as **Anyone with the link → Viewer**. The build downloads it as one `.xlsx` export,
 so every tab is read in a single request with no API keys.
 
 | Tab | Becomes |
@@ -61,7 +62,8 @@ Requires Node 22+. No dependencies to install.
 
 ```sh
 npm test                                  # unit + HTTP tests
-SHEET_ID=15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA npm run dev   # live sheet, http://localhost:8080
+SHEET_ID=15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA node scripts/fetch-sheet.js sheet.xlsx   # download the sheet
+SHEET_FILE=sheet.xlsx npm run dev                                    # serve it, http://localhost:8080
 npm run sample && SHEET_FILE=sample.xlsx npm run dev                # placeholder data, no network
 ```
 
@@ -69,7 +71,7 @@ npm run sample && SHEET_FILE=sample.xlsx npm run dev                # placeholde
 
 ```sh
 ./deploy.sh test     # run the test suite inside the image
-./deploy.sh local    # build and serve the container on http://localhost:8080 (live sheet)
+./deploy.sh local    # build and serve the container on http://localhost:8080 (sheet as of the build)
 SAMPLE=1 ./deploy.sh local   # ...with placeholder data instead
 ./deploy.sh smoke    # build, start the container, check every page type, stop it
 ```
@@ -89,8 +91,7 @@ commands without running them. Config comes from env vars or `.env.deploy` (git-
 PROJECT_ID=my-project
 REGION=europe-west1
 SERVICE=duskbloods
-SHEET_ID=15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA
-CACHE_SECONDS=60
+SHEET_ID=15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA   # downloaded into the image at build time
 ```
 
 The service is public (`--allow-unauthenticated`), scales to zero, and needs no secrets.
@@ -100,7 +101,7 @@ The service is public (`--allow-unauthenticated`), scales to zero, and needs no 
 `.github/workflows/ci.yml` runs on every push and pull request:
 
 - **test**: `npm test`, then `./deploy.sh smoke` (Docker build with tests inside, container smoke test on sample data
-  and the live sheet).
+  and the sheet downloaded into the image).
 - **deploy** (only `main`): builds and pushes the image to Artifact Registry, deploys to Cloud Run, then checks the live
   URL returns 200 for `/health`, `/`, `/compendium` and `/updates`. Deploys never overlap.
 
@@ -203,6 +204,7 @@ their cache for up to 60s without asking the server, so very quick back-and-fort
 ## Endpoints
 
 `POST /report` problem reports · `/` home · `/compendium` · `/c/:category` · `/c/:category/:entry` · `/updates` · `/updates/:post` · `/search?q=` ·
-`/api/content` (everything as JSON) · `/health` (last refresh time and error, if any)
+`/api/content` (everything as JSON) · `/health` (when the baked-in sheet was downloaded)
 
-If a sheet refresh fails, the last good copy keeps being served and the error is reported on `/health` and in the logs.
+If the sheet can't be downloaded or parsed, the image build fails, so nothing is deployed and the current revision keeps
+serving. If the container starts without a readable sheet, it exits before listening, so it never passes its health check.

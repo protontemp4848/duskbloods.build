@@ -31,7 +31,7 @@ jobs:
       - name: Unit and HTTP tests
         run: npm test
       # Builds the image (running the tests again inside it), starts the container and checks every page type,
-      # against sample data and against the live sheet.
+      # against sample data and against the sheet downloaded into the image.
       - name: Docker build and smoke test
         run: ./deploy.sh smoke
 
