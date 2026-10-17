@@ -148,6 +148,8 @@ test('privacy policy has the AdSense disclosures and is linked from every page',
   assert.match(r.text, /href="https:\/\/myadcenter\.google\.com\/"/);
   assert.match(r.text, /href="https:\/\/www\.aboutads\.info\/choices\/"/);
   assert.match(r.text, /href="https:\/\/policies\.google\.com\/technologies\/partner-sites"/);
+  assert.match(r.text, /Anonymous page counts\.[\s\S]*does not record your IP address/);
+  assert.doesNotMatch(r.text, /no analytics/);
   assert.match(r.text, /<link rel="canonical" href="[^"]*\/privacy">/);
   assert.doesNotMatch(r.text, /noindex/);
   for (const path of ['/', '/compendium', '/updates', '/c/weapons', '/nope']) {

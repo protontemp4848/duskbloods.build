@@ -5,8 +5,8 @@
 #   ./deploy.sh build     build the production image (runs tests first)
 #   ./deploy.sh local     build and run the container at http://localhost:8080 (live sheet; SAMPLE=1 for sample data)
 #   ./deploy.sh smoke     build, start the container, check every page type responds, stop it
-#   ./deploy.sh setup     one-time: enable APIs, create the image repo and runtime account; with DEPLOYER_SA set,
-#                         also grant that account what CI needs to push and deploy
+#   ./deploy.sh setup     one-time: enable APIs, create the image repo, runtime account and page view sink to BigQuery;
+#                         with DEPLOYER_SA set, also grant that account what CI needs to push and deploy
 #   ./deploy.sh push      build and push the image to Artifact Registry
 #   ./deploy.sh deploy    deploy the pushed image to Cloud Run
 #   ./deploy.sh all       test, build, smoke, push and deploy
@@ -20,6 +20,7 @@
 #   PORT        local port for `local` (default: 8080)
 #   RUNTIME_SA  account the service runs as (default: duskbloods-runtime@PROJECT_ID, which has no roles)
 #   DEPLOYER_SA account CI deploys as, for `setup` to grant roles to (e.g. duskbloods-build-sa@PROJECT_ID)
+#   DATASET     BigQuery dataset the page view sink writes to (default: analytics)
 #   DRY_RUN=1   print the gcloud/docker commands for setup/push/deploy instead of running them
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -28,6 +29,7 @@ cd "$(dirname "$0")"
 
 SERVICE="${SERVICE:-duskbloods}"
 REPO="${REPO:-duskbloods}"
+DATASET="${DATASET:-analytics}"
 REGION="${REGION:-europe-west1}"
 SHEET_ID="${SHEET_ID:-15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA}"
 CACHE_SECONDS="${CACHE_SECONDS:-60}"
@@ -140,6 +142,29 @@ cmd_setup() {
     log "Creating runtime account ${RUNTIME_SA} (no roles)"
     run gcloud iam service-accounts create "${RUNTIME_SA%%@*}" --project "$PROJECT_ID" --display-name "duskbloods.build Cloud Run runtime"
   fi
+
+  # Page views (src/analytics.js) are log lines; a sink copies them into one day-partitioned BigQuery table,
+  # ${DATASET}.run_googleapis_com_stdout. Partitions older than 400 days are deleted, as the privacy page promises.
+  log "Routing ${SERVICE} page view logs to BigQuery dataset ${DATASET}"
+  run gcloud services enable bigquery.googleapis.com logging.googleapis.com --project "$PROJECT_ID"
+  if [[ "${DRY_RUN:-}" != 1 ]] && bq --project_id "$PROJECT_ID" show --dataset "${PROJECT_ID}:${DATASET}" >/dev/null 2>&1; then
+    log "Dataset ${DATASET} already exists"
+  else
+    run bq --project_id "$PROJECT_ID" mk --dataset --location "$REGION" --default_partition_expiration $((400 * 86400)) \
+      --description "duskbloods.build page views" "${PROJECT_ID}:${DATASET}"
+  fi
+  local sink="${SERVICE}-pageviews"
+  local filter="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\" AND jsonPayload.message=\"pageview\""
+  local verb=create
+  [[ "${DRY_RUN:-}" != 1 ]] && gcloud logging sinks describe "$sink" --project "$PROJECT_ID" >/dev/null 2>&1 && verb=update
+  run gcloud logging sinks "$verb" "$sink" "bigquery.googleapis.com/projects/${PROJECT_ID}/datasets/${DATASET}" \
+    --log-filter "$filter" --use-partitioned-tables --project "$PROJECT_ID" --quiet
+  # The sink writes as a Google-managed account, which needs write access to this one dataset only.
+  local writer
+  writer="$([[ "${DRY_RUN:-}" == 1 ]] && echo 'serviceAccount:<sink writer identity>' \
+    || gcloud logging sinks describe "$sink" --project "$PROJECT_ID" --format 'value(writerIdentity)')"
+  run bq --project_id "$PROJECT_ID" add-iam-policy-binding --dataset --member "$writer" --role roles/bigquery.dataEditor \
+    "${PROJECT_ID}:${DATASET}"
 
   if [[ -n "${DEPLOYER_SA:-}" ]]; then
     log "Granting ${DEPLOYER_SA} what CI needs: deploy Cloud Run, push to ${REPO} only, run the service as ${RUNTIME_SA%%@*} only"
