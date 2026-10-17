@@ -7,13 +7,14 @@
 #   ./deploy.sh smoke     build, start the container, check every page type responds, stop it
 #   ./deploy.sh setup     one-time: enable APIs, create the image repo, runtime account and page view sink to BigQuery;
 #                         with DEPLOYER_SA set, also grant that account what CI needs to push and deploy
+#   ./deploy.sh check-analytics  read-only: check the page view sink can reach BigQuery, count the last day's rows
 #   ./deploy.sh push      build and push the image to Artifact Registry
 #   ./deploy.sh deploy    deploy the pushed image to Cloud Run
 #   ./deploy.sh all       test, build, smoke, push and deploy
 #
 # Config comes from env vars, or a .env.deploy file next to this script:
 #   PROJECT_ID  (default: current gcloud project)   REGION   (default: europe-west1)
-#   SERVICE     (default: duskbloods)                REPO     (default: duskbloods)
+#   SERVICE     (default: duskbloods; required by setup) REPO (default: duskbloods)
 #   SHEET_ID    (default: the Duskbloods sheet)      CACHE_SECONDS (default: 60)
 #   SITE_URL    public origin for canonical/sitemap URLs, e.g. https://duskbloods.build (default: the request host)
 #   FEEDBACK_FORM_URL  Google Form pre-filled link for "Report a problem" (unset: the form is hidden)
@@ -21,15 +22,18 @@
 #   RUNTIME_SA  account the service runs as (default: duskbloods-runtime@PROJECT_ID, which has no roles)
 #   DEPLOYER_SA account CI deploys as, for `setup` to grant roles to (e.g. duskbloods-build-sa@PROJECT_ID)
 #   DATASET     BigQuery dataset the page view sink writes to (default: analytics)
+#   SINK        name of that log sink (default: duskbloods-pageviews)
 #   DRY_RUN=1   print the gcloud/docker commands for setup/push/deploy instead of running them
 set -euo pipefail
 cd "$(dirname "$0")"
 # shellcheck source=/dev/null
 [[ -f .env.deploy ]] && set -a && source .env.deploy && set +a
 
+SERVICE_GIVEN="${SERVICE:-}"
 SERVICE="${SERVICE:-duskbloods}"
 REPO="${REPO:-duskbloods}"
 DATASET="${DATASET:-analytics}"
+SINK="${SINK:-duskbloods-pageviews}"
 REGION="${REGION:-europe-west1}"
 SHEET_ID="${SHEET_ID:-15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA}"
 CACHE_SECONDS="${CACHE_SECONDS:-60}"
@@ -123,6 +127,8 @@ cmd_smoke() {
 # organisation's domain-restricted-sharing policy forbids allUsers bindings, and gcloud only warns when that fails.
 # Idempotent: safe to re-run; existing resources and bindings are left as they are.
 cmd_setup() {
+  # The page view sink's filter names the Cloud Run service, so a wrong SERVICE routes nothing, silently. Make it explicit.
+  [[ -n "$SERVICE_GIVEN" ]] || die "setup needs SERVICE set to the Cloud Run service name (CI's CLOUD_RUN_NAME), e.g. SERVICE=duskbloods-build-web"
   cloud_config
   log "Enabling Cloud Run + Artifact Registry APIs in ${PROJECT_ID}"
   run gcloud services enable run.googleapis.com artifactregistry.googleapis.com --project "$PROJECT_ID"
@@ -153,18 +159,19 @@ cmd_setup() {
     run bq --project_id "$PROJECT_ID" mk --dataset --location "$REGION" --default_partition_expiration $((400 * 86400)) \
       --description "duskbloods.build page views" "${PROJECT_ID}:${DATASET}"
   fi
-  local sink="${SERVICE}-pageviews"
   local filter="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\" AND jsonPayload.message=\"pageview\""
   local verb=create
-  [[ "${DRY_RUN:-}" != 1 ]] && gcloud logging sinks describe "$sink" --project "$PROJECT_ID" >/dev/null 2>&1 && verb=update
-  run gcloud logging sinks "$verb" "$sink" "bigquery.googleapis.com/projects/${PROJECT_ID}/datasets/${DATASET}" \
+  [[ "${DRY_RUN:-}" != 1 ]] && gcloud logging sinks describe "$SINK" --project "$PROJECT_ID" >/dev/null 2>&1 && verb=update
+  run gcloud logging sinks "$verb" "$SINK" "bigquery.googleapis.com/projects/${PROJECT_ID}/datasets/${DATASET}" \
     --log-filter "$filter" --use-partitioned-tables --project "$PROJECT_ID" --quiet
-  # The sink writes as a Google-managed account, which needs write access to this one dataset only.
+  # The sink writes as a Google-managed account, which needs write access to this one dataset only. A SQL GRANT,
+  # because `bq add-iam-policy-binding --dataset` needs allowlisting and `bq update --source` is gone from newer bq.
   local writer
   writer="$([[ "${DRY_RUN:-}" == 1 ]] && echo 'serviceAccount:<sink writer identity>' \
-    || gcloud logging sinks describe "$sink" --project "$PROJECT_ID" --format 'value(writerIdentity)')"
-  run bq --project_id "$PROJECT_ID" add-iam-policy-binding --dataset --member "$writer" --role roles/bigquery.dataEditor \
-    "${PROJECT_ID}:${DATASET}"
+    || gcloud logging sinks describe "$SINK" --project "$PROJECT_ID" --format 'value(writerIdentity)')"
+  run bq --project_id "$PROJECT_ID" query --quiet --use_legacy_sql=false --location "$REGION" \
+    "GRANT \`roles/bigquery.dataEditor\` ON SCHEMA \`${PROJECT_ID}.${DATASET}\` TO \"${writer}\""
+  [[ "${DRY_RUN:-}" == 1 ]] || cmd_check_analytics
 
   if [[ -n "${DEPLOYER_SA:-}" ]]; then
     log "Granting ${DEPLOYER_SA} what CI needs: deploy Cloud Run, push to ${REPO} only, run the service as ${RUNTIME_SA%%@*} only"
@@ -174,6 +181,39 @@ cmd_setup() {
     run gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" --project "$PROJECT_ID" \
       --member "serviceAccount:${DEPLOYER_SA}" --role roles/iam.serviceAccountUser --quiet
   fi
+}
+
+# Read-only: checks the page view sink names a Cloud Run service that exists and can write to the dataset, then
+# counts the last day's rows. Both of the first two have failed silently before, so setup runs this at the end.
+cmd_check_analytics() {
+  cloud_config
+  log "Checking page view sink ${SINK} → ${PROJECT_ID}:${DATASET}"
+  local filter writer service failures=0
+  filter="$(gcloud logging sinks describe "$SINK" --project "$PROJECT_ID" --format 'value(filter)' 2>/dev/null)" \
+    || die "No sink ${SINK}. Run: SERVICE=<cloud run service> ./deploy.sh setup"
+  service="$(sed -n 's/.*resource\.labels\.service_name="\([^"]*\)".*/\1/p' <<<"$filter")"
+  if gcloud run services describe "$service" --project "$PROJECT_ID" --region "$REGION" >/dev/null 2>&1; then
+    echo "  ok   sink filter names Cloud Run service ${service}"
+  else
+    echo "  FAIL sink filter names service '${service}', which isn't deployed in ${REGION}; it matches nothing."
+    echo "       Deployed: $(gcloud run services list --project "$PROJECT_ID" --region "$REGION" --format 'value(metadata.name)' | paste -sd ' ')"
+    failures=$((failures + 1))
+  fi
+  writer="$(gcloud logging sinks describe "$SINK" --project "$PROJECT_ID" --format 'value(writerIdentity)')"
+  if bq --project_id "$PROJECT_ID" show --format json "${PROJECT_ID}:${DATASET}" \
+    | node -e 'const a = JSON.parse(require("fs").readFileSync(0)).access ?? [];
+        process.exit(a.some((e) => e.userByEmail === process.argv[1] && ["WRITER", "OWNER"].includes(e.role)) ? 0 : 1)' "${writer#serviceAccount:}"; then
+    echo "  ok   sink writer ${writer#serviceAccount:} can write to ${DATASET}"
+  else
+    echo "  FAIL sink writer ${writer#serviceAccount:} has no write access to ${DATASET}; every page view is dropped"
+    failures=$((failures + 1))
+  fi
+  local rows
+  rows="$(bq --project_id "$PROJECT_ID" query --quiet --use_legacy_sql=false --location "$REGION" --format csv \
+    "SELECT COUNT(*) FROM \`${PROJECT_ID}.${DATASET}.run_googleapis_com_stdout\` WHERE timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)" 2>/dev/null | tail -1)" \
+    || rows="no table yet (it's created by the first page view after setup)"
+  echo "  info page views in BigQuery, last 24h: ${rows}"
+  [[ $failures == 0 ]] || die "Page view sink is broken"
 }
 
 cmd_push() {
@@ -209,8 +249,9 @@ case "${1:-}" in
   local) cmd_local ;;
   smoke) cmd_smoke ;;
   setup) cmd_setup ;;
+  check-analytics) cmd_check_analytics ;;
   push) cmd_push ;;
   deploy) cmd_deploy ;;
   all) cmd_smoke && cmd_push && cmd_deploy ;;
-  *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
