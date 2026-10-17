@@ -30,7 +30,7 @@ cd "$(dirname "$0")"
 [[ -f .env.deploy ]] && set -a && source .env.deploy && set +a
 
 SERVICE_GIVEN="${SERVICE:-}"
-SERVICE="${SERVICE:-duskbloods}"
+SERVICE="${SERVICE:-duskbloods-build-web}"
 REPO="${REPO:-duskbloods}"
 DATASET="${DATASET:-analytics}"
 SINK="${SINK:-duskbloods-pageviews}"
