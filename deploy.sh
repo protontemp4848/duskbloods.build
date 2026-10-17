@@ -3,7 +3,7 @@
 #
 #   ./deploy.sh test      run the unit tests inside Docker
 #   ./deploy.sh build     build the production image (runs tests first)
-#   ./deploy.sh local     build and run the container at http://localhost:8080 (live sheet; SAMPLE=1 for sample data)
+#   ./deploy.sh local     build and run the container at http://localhost:8080 (sheet as of the build; SAMPLE=1 for sample data)
 #   ./deploy.sh smoke     build, start the container, check every page type responds, stop it
 #   ./deploy.sh setup     one-time: enable APIs, create the image repo, runtime account and page view sink to BigQuery;
 #                         with DEPLOYER_SA set, also grant that account what CI needs to push and deploy
@@ -15,7 +15,7 @@
 # Config comes from env vars, or a .env.deploy file next to this script:
 #   PROJECT_ID  (default: current gcloud project)   REGION   (default: europe-west1)
 #   SERVICE     (default: duskbloods; required by setup) REPO (default: duskbloods)
-#   SHEET_ID    (default: the Duskbloods sheet)      CACHE_SECONDS (default: 60)
+#   SHEET_ID    sheet downloaded into the image at build time (default: the Duskbloods sheet)
 #   SITE_URL    public origin for canonical/sitemap URLs, e.g. https://duskbloods.build (default: the request host)
 #   FEEDBACK_FORM_URL  Google Form pre-filled link for "Report a problem" (unset: the form is hidden)
 #   PORT        local port for `local` (default: 8080)
@@ -36,7 +36,6 @@ DATASET="${DATASET:-analytics}"
 SINK="${SINK:-duskbloods-pageviews}"
 REGION="${REGION:-europe-west1}"
 SHEET_ID="${SHEET_ID:-15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA}"
-CACHE_SECONDS="${CACHE_SECONDS:-60}"
 PORT="${PORT:-8080}"
 LOCAL_IMAGE="${SERVICE}:local"
 
@@ -73,26 +72,27 @@ cmd_test() {
 
 cmd_build() {
   cmd_test
-  log "Building ${LOCAL_IMAGE} (linux/amd64, as Cloud Run requires)"
-  docker build --platform linux/amd64 --target runtime -t "$LOCAL_IMAGE" .
+  log "Building ${LOCAL_IMAGE} (linux/amd64, as Cloud Run requires) with sheet ${SHEET_ID}"
+  # The sheet stage is never cached, so every build bakes in the sheet as it is now.
+  docker build --platform linux/amd64 --target runtime --build-arg "SHEET_ID=${SHEET_ID}" --no-cache-filter sheet -t "$LOCAL_IMAGE" .
 }
 
 cmd_local() {
   cmd_build
-  local args=(-e "SHEET_ID=${SHEET_ID}" -e "CACHE_SECONDS=${CACHE_SECONDS}")
+  local args=()
   if [[ "${SAMPLE:-}" == 1 ]]; then
     node scripts/make-sample.js
     args=(-e SHEET_FILE=/data/sample.xlsx -v "$PWD/sample.xlsx:/data/sample.xlsx:ro")
   fi
   log "Serving on http://localhost:${PORT} (Ctrl-C to stop)"
-  docker run --rm -it --init -p "${PORT}:8080" "${args[@]}" "$LOCAL_IMAGE"
+  docker run --rm -it --init -p "${PORT}:8080" ${args[@]+"${args[@]}"} "$LOCAL_IMAGE"
 }
 
 # Starts the container, waits for /health, and checks each page type returns the expected status.
 smoke_check() {
   local label="$1"; shift
   local name="${SERVICE}-smoke-$$" port
-  docker run -d --rm --name "$name" -p 127.0.0.1::8080 "$@" "$LOCAL_IMAGE" >/dev/null
+  docker run -d --rm --name "$name" -p 127.0.0.1::8080 ${@+"$@"} "$LOCAL_IMAGE" >/dev/null
   # shellcheck disable=SC2064 # expand $name now: it's local and gone by the time the trap fires
   trap "docker rm -f $name >/dev/null 2>&1 || true" RETURN
   port="$(docker port "$name" 8080 | head -1 | sed 's/.*://')"
@@ -119,7 +119,7 @@ cmd_smoke() {
     "/updates/sample-update-site-launched 200" "/search?q=sabre 200" "/api/content 200" "/static/style.css 200" "/static/app.js 200" "/c/nope 404")
   smoke_check "sample data" -e SHEET_FILE=/data/sample.xlsx -v "$PWD/sample.xlsx:/data/sample.xlsx:ro"
   SMOKE_PATHS=("/ 200" "/compendium 200" "/updates 200" "/search?q=x 200" "/health 200")
-  smoke_check "live sheet" -e "SHEET_ID=${SHEET_ID}"
+  smoke_check "baked-in sheet"
   log "Smoke tests passed"
 }
 
@@ -239,7 +239,7 @@ cmd_deploy() {
     --port 8080 \
     --cpu 1 --memory 256Mi \
     --min-instances 0 --max-instances 3 \
-    --set-env-vars "^@^SHEET_ID=${SHEET_ID}@CACHE_SECONDS=${CACHE_SECONDS}@SITE_URL=${SITE_URL:-}@FEEDBACK_FORM_URL=${FEEDBACK_FORM_URL:-}"
+    --set-env-vars "^@^SITE_URL=${SITE_URL:-}@FEEDBACK_FORM_URL=${FEEDBACK_FORM_URL:-}"
   [[ "${DRY_RUN:-}" == 1 ]] || log "Live at: $(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')"
 }
 
