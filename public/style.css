@@ -94,7 +94,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 .page-desc { max-width: 64ch; color: var(--muted); font-size: 16px; margin-top: 16px; }
 .page-desc p + p { margin-top: .75em; }
 .tabs + .page-desc { margin: 20px 0 4px; }
-.tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs { display: flex; gap: 28px; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .tabs a { padding: 10px 0; white-space: nowrap; text-decoration: none; color: var(--muted); border-bottom: 1px solid transparent; margin-bottom: -1px; }
 .tabs a:hover { color: var(--text); }
 .tabs a[aria-current] { color: var(--text); border-bottom-color: var(--accent); }
