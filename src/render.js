@@ -129,7 +129,7 @@ ${seo.jsonLdTag([...seo.siteGraph(content), ...(meta.jsonld ?? [])])}
 <main class="wrap">${body}${reportBox(content, meta.reportLabel ?? meta.title)}</main>
 <footer class="foot">
   <div class="wrap foot-inner">
-    <p>Unofficial fan site. Not affiliated with FromSoftware or Nintendo. <a href="/privacy">Privacy</a>${site.discord_url ? ` <a href="${esc(site.discord_url)}" rel="noopener">Discord</a>` : ''}</p>
+    <p>Unofficial fan site. Not affiliated with FromSoftware or Nintendo. <a href="/privacy">Privacy</a> <a href="https://x.com/Duskbloodsbuild" rel="noopener">X</a>${site.discord_url ? ` <a href="${esc(site.discord_url)}" rel="noopener">Discord</a>` : ''}</p>
     <p class="mono">Synced ${esc(content.fetchedAt.slice(0, 16).replace('T', ' '))} UTC</p>
   </div>
 </footer>
