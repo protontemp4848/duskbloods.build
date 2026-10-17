@@ -153,6 +153,8 @@ test('privacy policy has the AdSense disclosures and is linked from every page',
   assert.match(r.text, /<link rel="canonical" href="[^"]*\/privacy">/);
   assert.doesNotMatch(r.text, /noindex/);
   for (const path of ['/', '/compendium', '/updates', '/c/weapons', '/nope']) {
-    assert.match((await get(path)).text, /<footer[\s\S]*<a href="\/privacy">Privacy<\/a>/, path);
+    const page = (await get(path)).text;
+    assert.match(page, /<footer[\s\S]*<a href="\/privacy">Privacy<\/a>/, path);
+    assert.match(page, /<footer[\s\S]*<a href="https:\/\/x\.com\/Duskbloodsbuild" rel="noopener">X<\/a>/, path);
   }
 });
