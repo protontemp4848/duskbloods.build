@@ -219,8 +219,7 @@ ${roster ? `<section class="home-roster">
   </section>
 </div>`;
   const meta = {
-    title: seo.fullTitle(`${site.game} Wiki: ${sections.length ? `${sections.join(', ')} & More` : 'Compendium'}`, site),
-    ogTitle: `${site.title}: ${site.game} compendium`,
+    title: `${site.title} - A build tool and companion for ${site.game}`,
     reportLabel: 'Home',
     description: seo.describeHome(content),
     path: '/',

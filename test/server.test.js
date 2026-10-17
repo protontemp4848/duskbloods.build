@@ -26,7 +26,8 @@ test('home page renders site, countdown, news and categories', async () => {
   assert.equal(r.status, 200);
   assert.match(r.csp, /script-src 'self' https:;/);
   assert.match(r.text, /<script async src="https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-3267360964563410" crossorigin="anonymous"><\/script>\n<\/head>/);
-  assert.match(r.text, /<title>The Duskbloods Wiki: Bloodsworn, Weapons, Search &amp; More<\/title>/);
+  assert.match(r.text, /<title>Duskbloods\.build - A build tool and companion for The Duskbloods<\/title>/);
+  assert.match(r.text, /<meta property="og:title" content="Duskbloods\.build - A build tool and companion for The Duskbloods">/);
   assert.match(r.text, /Sample tagline &lt;b&gt;escaped&lt;\/b&gt;/);
   assert.match(r.text, /<p class="release mono">Release 31 Dec 2026 · <strong>\d+<\/strong> days to go<\/p>/);
   assert.match(r.text, /<h1 class="visually-hidden">The Duskbloods compendium: Bloodsworn, Weapons, Search and more<\/h1>/);
