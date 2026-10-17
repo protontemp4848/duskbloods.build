@@ -478,7 +478,7 @@ export function postPage(content, post) {
 }
 
 // Required for AdSense: says what Google's ad cookies do and how to opt out. Edit PRIVACY_UPDATED when the text changes.
-const PRIVACY_UPDATED = '2026-10-16';
+const PRIVACY_UPDATED = '2026-10-17';
 
 export function privacyPage(content) {
   const { site } = content;
@@ -495,7 +495,8 @@ export function privacyPage(content) {
 
 <h2>What this site itself collects</h2>
 <ul>
-<li><strong>No accounts, no cookies of our own, no analytics.</strong> The site sets no cookies itself; any cookies come from the ad services above.</li>
+<li><strong>No accounts and no cookies of our own.</strong> The site sets no cookies itself; any cookies come from the ad services above.</li>
+<li><strong>Anonymous page counts.</strong> To see which pages are read, our server records each page view: the page address (without anything after the “?”), the date and time, whether you’re on a phone, tablet or computer, the name of the website that linked you here (e.g. “reddit.com”, not the page on it), and for searches, what was searched and how many results it found. It does not record your IP address, your browser details or anything that links one visit to another, and nothing is stored in your browser. These counts are kept for up to 400 days.</li>
 <li><strong>Server logs.</strong> Like any website, our hosting provider (Google Cloud) records standard request details such as your IP address, the page requested, the time and your browser’s user agent. These are used to keep the site running and secure and are deleted automatically after a limited time.</li>
 <li><strong>“Report a problem” form.</strong> If you send a report, the page it was sent from, the entry name and your message are stored in a Google Sheet that the site’s editors read. We don’t ask for your name or email, so please don’t include personal details in the message. Your IP address is held in memory for up to 10 minutes to stop spam and is not stored with the report.</li>
 <li><strong>Images from other sites.</strong> Some pictures may be loaded from other websites, which then receive the usual request details from your browser.</li>

@@ -113,8 +113,8 @@ One-time GCP setup (already run for `duskbloods-build`):
 PROJECT_ID=duskbloods-build DEPLOYER_SA=duskbloods-build-sa@duskbloods-build.iam.gserviceaccount.com ./deploy.sh setup
 ```
 
-This enables the APIs, creates the `duskbloods` image repo and a `duskbloods-runtime` account with **no roles** for the
-site to run as, and gives the deploy account only `run.admin`, write access to that one repo, and permission to run
+This enables the APIs, creates the `duskbloods` image repo, a `duskbloods-runtime` account with **no roles** for the
+site to run as, and the page view sink to BigQuery (see [Analytics](#analytics); pass `SERVICE=duskbloods-build-web`), and gives the deploy account only `run.admin`, write access to that one repo, and permission to run
 services as `duskbloods-runtime`.
 
 ## SEO
@@ -149,6 +149,50 @@ Setup (once):
 3. ⋮ → **Get pre-filled link**. Type `PAGE`, `ENTRY` and `MESSAGE` into the three questions, then *Get link* → *Copy link*.
 4. Set that link as the `FEEDBACK_FORM_URL` GitHub repository **variable** (not a secret; the form is public), or
    as an env var for `./deploy.sh deploy`. Without it, the form is hidden.
+
+## Analytics
+
+Page views are counted on the server, with no cookies, no client script and no third party. Each page a person loads
+(not static files, feeds, `/health`, redirects, `HEAD`, browser prefetches or bots) writes one log line:
+
+```json
+{"severity":"INFO","message":"pageview","pageview":{"path":"/search","status":200,"ref":"reddit.com","device":"mobile","q":"blood blade","results":0}}
+```
+
+`ref` is only the hostname of another site that linked here; `q`/`results` appear only on searches. IPs, user agents,
+query strings and anything that links one visit to another are never recorded (see `src/analytics.js` and `/privacy`).
+
+`./deploy.sh setup` creates a log sink that copies these lines into BigQuery (`analytics.run_googleapis_com_stdout`,
+partitioned by day, partitions deleted after 400 days). Run it with the **live service name**, or the sink matches nothing:
+
+```sh
+PROJECT_ID=duskbloods-build SERVICE=duskbloods-build-web ./deploy.sh setup
+```
+
+Rows only start arriving after the first page view following setup. Example queries
+(`bq query --use_legacy_sql=false '…'`, or the BigQuery console):
+
+```sql
+-- Top pages, last 30 days
+SELECT jsonPayload.pageview.path, COUNT(*) AS views
+FROM `duskbloods-build.analytics.run_googleapis_com_stdout`
+WHERE timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY) AND jsonPayload.pageview.status = 200
+GROUP BY 1 ORDER BY views DESC LIMIT 50;
+
+-- Searches that found nothing: what to add to the sheet next
+SELECT jsonPayload.pageview.q, COUNT(*) AS searches
+FROM `duskbloods-build.analytics.run_googleapis_com_stdout`
+WHERE jsonPayload.pageview.results = 0
+GROUP BY 1 ORDER BY searches DESC LIMIT 50;
+
+-- Views per day, by device; referrers; and broken inbound links (404s)
+SELECT DATE(timestamp) AS day, jsonPayload.pageview.device, COUNT(*) FROM `duskbloods-build.analytics.run_googleapis_com_stdout` GROUP BY 1, 2 ORDER BY 1 DESC;
+SELECT jsonPayload.pageview.ref, COUNT(*) AS views FROM `duskbloods-build.analytics.run_googleapis_com_stdout` WHERE jsonPayload.pageview.ref != '' GROUP BY 1 ORDER BY 2 DESC;
+SELECT jsonPayload.pageview.path, COUNT(*) AS hits FROM `duskbloods-build.analytics.run_googleapis_com_stdout` WHERE jsonPayload.pageview.status = 404 GROUP BY 1 ORDER BY 2 DESC;
+```
+
+Counts are page views, not people: there are no unique-visitor numbers by design. Browsers may re-show a page from
+their cache for up to 60s without asking the server, so very quick back-and-forth navigation can be undercounted.
 
 ## Endpoints
 
