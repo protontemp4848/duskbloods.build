@@ -110,11 +110,11 @@ key). Optional repository variables: `REGION` (default `europe-west1`) and `SHEE
 One-time GCP setup (already run for `duskbloods-build`):
 
 ```sh
-PROJECT_ID=duskbloods-build DEPLOYER_SA=duskbloods-build-sa@duskbloods-build.iam.gserviceaccount.com ./deploy.sh setup
+PROJECT_ID=duskbloods-build SERVICE=duskbloods-build-web DEPLOYER_SA=duskbloods-build-sa@duskbloods-build.iam.gserviceaccount.com ./deploy.sh setup
 ```
 
 This enables the APIs, creates the `duskbloods` image repo, a `duskbloods-runtime` account with **no roles** for the
-site to run as, and the page view sink to BigQuery (see [Analytics](#analytics); pass `SERVICE=duskbloods-build-web`), and gives the deploy account only `run.admin`, write access to that one repo, and permission to run
+site to run as, and the page view sink to BigQuery (see [Analytics](#analytics)), and gives the deploy account only `run.admin`, write access to that one repo, and permission to run
 services as `duskbloods-runtime`.
 
 ## SEO
@@ -163,13 +163,19 @@ Page views are counted on the server, with no cookies, no client script and no t
 query strings and anything that links one visit to another are never recorded (see `src/analytics.js` and `/privacy`).
 
 `./deploy.sh setup` creates a log sink that copies these lines into BigQuery (`analytics.run_googleapis_com_stdout`,
-partitioned by day, partitions deleted after 400 days). Run it with the **live service name**, or the sink matches nothing:
+partitioned by day, partitions deleted after 400 days). `setup` refuses to run without `SERVICE`, the live Cloud Run
+service name, because a sink filtered on the wrong name matches nothing and fails silently. It ends by running the check
+below.
 
 ```sh
 PROJECT_ID=duskbloods-build SERVICE=duskbloods-build-web ./deploy.sh setup
+PROJECT_ID=duskbloods-build ./deploy.sh check-analytics   # read-only, any time: sink names a deployed service,
+                                                          # its writer can write to the dataset, rows in the last 24h
 ```
 
-Rows only start arriving after the first page view following setup. Example queries
+Rows only start arriving after the first page view following setup, a minute or two after it happens. The table's
+columns are created from the rows seen so far, so `q` and `results` don't exist (and queries using them fail) until the
+first search is logged; `status` is stored as a FLOAT, so cast it for display. Example queries
 (`bq query --use_legacy_sql=false '…'`, or the BigQuery console):
 
 ```sql
