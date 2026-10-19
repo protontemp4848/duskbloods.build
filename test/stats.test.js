@@ -70,6 +70,19 @@ test('a Stats tab is a sortable, right-aligned table; its pages are canonicalise
   assert.doesNotMatch(page, /<dl class="stats">/, 'nothing but stats, so no plain list');
 });
 
+test('a tab with no image column borrows the portrait from the same name in Characters, in rows and on the page', () => {
+  const stats = cat('Stats');
+  assert.ok(stats.items.every((i) => !i.image), 'the Stats tab has no pictures of its own');
+  const albert = characters.items.find((i) => i.title === 'Albert');
+  assert.match(albert.image, /^https:\/\/media\.fromsoftware\.jp\//);
+  const html = render.categoryPage(content, stats);
+  assert.match(html, new RegExp(`<td class="entry-name"><a href="/c/stats/albert"><img src="${albert.image}" alt="" width="40" height="40" loading="lazy"><span><strong>Albert</strong>`));
+  assert.equal((html.match(/<td class="entry-name"><a href="[^"]*"><img /g) ?? []).length, stats.items.length, 'every row has its portrait');
+  const page = render.itemPage(content, stats, stats.items[0]);
+  assert.match(page, /<article class="entry entry--image">/);
+  assert.match(page, new RegExp(`<img class="detail-img" src="${albert.image}" alt="Albert"`));
+});
+
 test('portrait cards show the weapons, not the numbers', () => {
   const html = render.categoryPage(content, characters);
   assert.match(html, /<strong>Zork<\/strong>\s*<small>Undersea Cable · Speargun<\/small>/);
