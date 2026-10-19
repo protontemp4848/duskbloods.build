@@ -71,6 +71,13 @@ function titleIndex(content) {
 // The same name listed in other tabs (e.g. "Albert" in Characters, Weapons and Skills).
 const alsoIn = (content, self) => (titleIndex(content).get(normTitle(self.title)) ?? []).filter((e) => e.item !== self);
 
+// The entry carrying this item's picture: itself, else the same name in another tab (an Attributes row with no
+// image column shows the Characters portrait, like the Weapons and Aspects rows do). Carries imageSize too.
+function pictureOf(content, item) {
+  if (item.image) return item;
+  return (titleIndex(content).get(normTitle(item.title)) ?? []).find((e) => e.item.image)?.item ?? item;
+}
+
 // A cell whose whole value is another entry's name links to that entry.
 function linked(content, value, self) {
   const hit = (titleIndex(content).get(normTitle(value)) ?? []).find((e) => e.item !== self);
@@ -316,8 +323,8 @@ function groupedAbilities(content, item, opts) {
 // Stacked entries with everything visible: for prose and paired abilities.
 function entryList(content, category) {
   // The first few thumbnails are above the fold: load them eagerly.
-  return `<div class="list">${category.items.map((item, i) => `<article class="list-entry${item.image ? ' list-entry--image' : ''}" id="${esc(item.slug)}" ${filterAttrs(item)}>
-  ${item.image ? `<img class="list-thumb${isSquarish(item) ? ' list-thumb--square' : ''}" src="${esc(item.image)}" alt="" ${sizeAttrs(item)}${i < 3 ? '' : ' loading="lazy"'}>` : ''}
+  return `<div class="list">${category.items.map((item, i) => { const pic = pictureOf(content, item); return `<article class="list-entry${pic.image ? ' list-entry--image' : ''}" id="${esc(item.slug)}" ${filterAttrs(item)}>
+  ${pic.image ? `<img class="list-thumb${isSquarish(pic) ? ' list-thumb--square' : ''}" src="${esc(pic.image)}" alt="" ${sizeAttrs(pic)}${i < 3 ? '' : ' loading="lazy"'}>` : ''}
   <div class="list-main">
     <h2><a href="${hrefOf(category, item)}">${esc(item.title)}</a></h2>
     ${item.tags.length ? `<p class="entry-tags">${item.tags.map(esc).join(' · ')}</p>` : ''}
@@ -326,7 +333,7 @@ function entryList(content, category) {
     ${groupedAbilities(content, item, { compact: true }).map((g) => g.html).join('')}
     ${item.sections.map((s) => `<details class="more"><summary>${esc(s.label)}</summary><div class="prose">${paragraphs(s.value)}</div></details>`).join('')}
   </div>
-</article>`).join('')}</div>`;
+</article>`; }).join('')}</div>`;
 }
 
 function entryTable(content, rows, category, { extraHead = '', extraCell = () => '' } = {}) {
@@ -349,8 +356,9 @@ function entryTable(content, rows, category, { extraHead = '', extraCell = () =>
 <tbody>${rows.map(({ item, href, category: cat }) => {
   const values = new Map(item.fields.map((f) => [f.label, f.value]));
   const abilities = new Map(item.abilities.map((a) => [a.label, a]));
+  const pic = pictureOf(content, item);
   return `<tr ${filterAttrs(item, [cat ?? ''])}>
-  <td class="entry-name"><a href="${href}">${item.image ? `<img src="${esc(item.image)}" alt="" width="40" height="40" loading="lazy">` : ''}<span><strong>${esc(item.title)}</strong>${item.summary ? `<small>${esc(item.summary)}</small>` : ''}</span></a></td>
+  <td class="entry-name"><a href="${href}">${pic.image ? `<img src="${esc(pic.image)}" alt="" width="40" height="40" loading="lazy">` : ''}<span><strong>${esc(item.title)}</strong>${item.summary ? `<small>${esc(item.summary)}</small>` : ''}</span></a></td>
   ${extraCell({ item, category: cat })}
   ${cols.map((label, i) => `<td${numeric[i] ? ' class="num"' : ''}>${linked(content, values.get(label) ?? '', item)}</td>`).join('')}
   ${abilityCols.map((label) => { const a = abilities.get(label); return `<td class="ability-cell">${a ? `<strong>${esc(a.name)}</strong><small>${esc(a.text)}</small>` : ''}</td>`; }).join('')}
@@ -407,15 +415,16 @@ ${view}
 function entry(content, item, { crumbs, pager = '', category = null }) {
   const related = alsoIn(content, item);
   const fields = textFields(category, item);
+  const pic = pictureOf(content, item);
   return `
 <nav class="crumbs">${crumbs}</nav>
-<article class="entry${item.image ? ' entry--image' : ''}${isSquarish(item) ? ' entry--icon' : ''}">
+<article class="entry${pic.image ? ' entry--image' : ''}${isSquarish(pic) ? ' entry--icon' : ''}">
   <header class="entry-head">
     ${item.date ? `<time class="mono" datetime="${esc(item.date)}">${esc(formatDate(item.date))}</time>` : ''}
     <h1>${esc(item.title)}</h1>
     ${item.tags.length ? `<p class="entry-tags">${item.tags.map(esc).join('<span aria-hidden="true"> · </span>')}</p>` : ''}
   </header>
-  ${item.image ? `<figure class="entry-figure"><img class="detail-img" src="${esc(item.image)}" alt="${esc(item.title)}" ${sizeAttrs(item, [427, 990])} fetchpriority="high"></figure>` : ''}
+  ${pic.image ? `<figure class="entry-figure"><img class="detail-img" src="${esc(pic.image)}" alt="${esc(item.title)}" ${sizeAttrs(pic, [427, 990])} fetchpriority="high"></figure>` : ''}
   <div class="entry-body">
     ${item.summary ? `<p class="flavor">${esc(item.summary)}</p>` : ''}
     ${fields.length ? `<dl class="stats">${fields.map((f) => `<div><dt>${esc(f.label)}</dt><dd${isNumeric(f.value) ? ' class="mono"' : ''}>${linked(content, f.value, item)}</dd></div>`).join('')}</dl>` : ''}
