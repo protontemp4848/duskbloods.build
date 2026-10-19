@@ -337,7 +337,7 @@ function entryList(content, category) {
 }
 
 function entryTable(content, rows, category, { extraHead = '', extraCell = () => '' } = {}) {
-  const cols = (category?.fields ?? []).slice(0, 5);
+  const cols = category?.fields ?? [];
   const abilityCols = (category?.abilityLabels ?? []).slice(0, 4);
   // A column is numeric when every filled cell is a number; numeric columns align right, header included.
   const numeric = cols.map((label) => {
