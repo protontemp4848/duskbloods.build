@@ -18,7 +18,8 @@
 //
 // Paired columns: "X" next to "X Description" (e.g. "Skill 2 (Level 12)" + "Skill 2 Description") become an
 // ability { group: "Skills", name, note: "Level 12", text }. Columns whose text is long on average become
-// prose sections; the rest are short stats.
+// prose sections; the rest are short stats. Short columns whose every value is a number (Health, Stamina, ...)
+// are listed in statLabels: entry pages show them as a Stats section with bars, scaled to the tab's highest value.
 
 import { createHash } from 'node:crypto';
 import { resolveBadge } from './icons.js';
@@ -78,6 +79,7 @@ function uniqueSlug(base, used) {
 }
 
 const LONG_TEXT = 80; // average characters above which a column is prose, not a stat
+export const isNumeric = (v) => /^-?\d+(\.\d+)?%?$/.test(String(v).trim());
 
 // "Skill 2 (Level 12)" -> { base: "Skill 2", note: "Level 12" }
 function splitNote(label) {
@@ -139,6 +141,11 @@ export function tabToItems(rows, { images = [], media = new Map() } = {}) {
     return vals.length ? vals.reduce((n, v) => n + v.length, 0) / vals.length : 0;
   };
   const longCols = new Set(rest.filter((c) => avgLength(c) > LONG_TEXT).map((c) => c.i));
+  // Numeric columns: every filled cell is a number (so "12", "20%", "-3"; not "12 (base)"), and at least one is filled.
+  const numericCols = rest.filter((c) => {
+    const vals = filled.map((r) => r[c.i] ?? '').filter(Boolean);
+    return !longCols.has(c.i) && vals.length > 0 && vals.every(isNumeric);
+  });
 
   const used = new Set();
   const items = [];
@@ -173,6 +180,9 @@ export function tabToItems(rows, { images = [], media = new Map() } = {}) {
     columns: columns.map((c) => c.label),
     // Short "other" columns in sheet order (table headers), and the paired ability columns.
     fields: rest.filter((c) => !longCols.has(c.i)).map((c) => c.label),
+    // The numeric subset of `fields`, in sheet order. Each item still carries these in item.fields (tables, search,
+    // /api/content); entry pages and portrait cards pull them out and draw them as bars.
+    statLabels: numericCols.map((c) => c.label),
     abilityLabels: pairs.map((p) => p.label),
     tagLabel: role.tags?.label ?? 'Tags',
     items,

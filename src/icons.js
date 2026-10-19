@@ -16,13 +16,14 @@ const ICONS = {
   crown: '<path d="M2 18h20"/><path d="M3 18 2 7l6 4 4-7 4 7 6-4-1 11"/>',
   moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   gem: '<path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 17v-6"/><path d="M13 17V7"/><path d="M18 17v-3"/>',
 };
 
 export const COLORS = ['red', 'amber', 'green', 'teal', 'blue', 'violet', 'rose', 'grey'];
 
 const DEFAULT_COLOR = {
   person: 'violet', sword: 'red', flask: 'green', bolt: 'amber', drop: 'rose', page: 'blue', map: 'teal',
-  skull: 'grey', shield: 'blue', book: 'amber', star: 'violet', crown: 'amber', moon: 'teal', gem: 'rose',
+  skull: 'grey', shield: 'blue', book: 'amber', star: 'violet', crown: 'amber', moon: 'teal', gem: 'rose', chart: 'teal',
 };
 
 // Section name keywords -> icon. First match wins; matched against the lowercased name.
@@ -40,6 +41,7 @@ const KEYWORDS = [
   [/spell|magic|sorcer|arcane/, 'star'],
   [/achievement|trophy|rank/, 'crown'],
   [/relic|gem|material|upgrade/, 'gem'],
+  [/stat|attribute/, 'chart'],
 ];
 
 export const ICON_NAMES = Object.keys(ICONS);

@@ -2,6 +2,7 @@
 import { badgeHtml } from './icons.js';
 import { asset } from './assets.js';
 import * as seo from './seo.js';
+import { isNumeric } from './content.js';
 
 // Google AdSense publisher ID: loads the ad script on every page and backs /ads.txt.
 export const ADSENSE_CLIENT = 'ca-pub-3267360964563410';
@@ -13,7 +14,6 @@ export function esc(v) {
 const paragraphs = (text) =>
   String(text).split(/\n\s*\n|\r?\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p)}</p>`).join('');
 
-const isNumeric = (v) => /^-?\d+(\.\d+)?%?$/.test(String(v).trim());
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const oneLine = (s) => String(s).replace(/\s+/g, ' ').trim();
 
@@ -249,7 +249,38 @@ ${categoryIndex(content.categories)}`;
   return layout({ content, meta, body, active: 'compendium' });
 }
 
-// Character-select style: tall portraits, name, and the first two short stats.
+/* ---------- Stats (numeric columns) ---------- */
+
+// A category's numeric columns are drawn as bars on entry pages, so they're left out of the plain field list.
+const isStat = (category, f) => Boolean(category?.statLabels?.includes(f.label));
+const textFields = (category, item) => item.fields.filter((f) => !isStat(category, f));
+
+// Bar scale per stat: the highest value of that column in the tab (so the best in the roster fills the bar).
+function statScale(category) {
+  const max = new Map();
+  for (const item of category.items) {
+    for (const f of item.fields) {
+      if (!isStat(category, f)) continue;
+      const n = parseFloat(f.value);
+      if (Number.isFinite(n)) max.set(f.label, Math.max(max.get(f.label) ?? 0, n));
+    }
+  }
+  return max;
+}
+
+function statBars(content, category, item) {
+  const stats = item.fields.filter((f) => isStat(category, f));
+  if (!stats.length) return '';
+  const scale = statScale(category);
+  const bar = (f) => {
+    const n = parseFloat(f.value), top = scale.get(f.label) ?? 0;
+    const pct = Number.isFinite(n) && top > 0 ? Math.round(Math.max(0, Math.min(1, n / top)) * 100) : 0;
+    return `<div><dt>${esc(f.label)}</dt><dd><span class="stat-track" aria-hidden="true"><span class="stat-fill" style="width:${pct}%"></span></span><span class="stat-value mono">${esc(f.value)}</span></dd></div>`;
+  };
+  return `<section class="entry-section entry-stats"><h2 class="with-badge">${badge(badgeForName(content, 'Stats'))}Stats</h2><dl class="stat-bars">${stats.map(bar).join('')}</dl></section>`;
+}
+
+// Character-select style: tall portraits, name, and the first two short (non-numeric) stats.
 // width/height attributes: the real size when known (pictures placed in the sheet), else a fallback shape.
 const sizeAttrs = (item, fallback) => { const [w, h] = item.imageSize ?? fallback ?? []; return w ? `width="${w}" height="${h}"` : ''; };
 // Icons and other roughly square images are shown whole; tall portraits are cropped to the card.
@@ -262,7 +293,7 @@ function portraitGrid(category, items, { eager = 0 } = {}) {
   ${item.image ? `<img src="${esc(item.image)}" alt="" ${sizeAttrs(item, [427, 990])} decoding="async"${loading(i)}>` : `<span class="portrait-blank" aria-hidden="true">${esc(item.title.slice(0, 1))}</span>`}
   <span class="portrait-text">
     <strong>${esc(item.title)}</strong>
-    ${item.fields.length ? `<small>${esc(item.fields.slice(0, 2).map((f) => f.value).join(' · '))}</small>` : ''}
+    ${textFields(category, item).length ? `<small>${esc(textFields(category, item).slice(0, 2).map((f) => f.value).join(' · '))}</small>` : ''}
   </span>
 </a>`).join('')}</div>`;
 }
@@ -372,8 +403,10 @@ ${view}
 
 /* ---------- Entry pages ---------- */
 
-function entry(content, item, { crumbs, pager = '' }) {
+// category: the entry's category (sets which fields are drawn as stat bars); news posts have none.
+function entry(content, item, { crumbs, pager = '', category = null }) {
   const related = alsoIn(content, item);
+  const fields = textFields(category, item);
   return `
 <nav class="crumbs">${crumbs}</nav>
 <article class="entry${item.image ? ' entry--image' : ''}${isSquarish(item) ? ' entry--icon' : ''}">
@@ -385,7 +418,8 @@ function entry(content, item, { crumbs, pager = '' }) {
   ${item.image ? `<figure class="entry-figure"><img class="detail-img" src="${esc(item.image)}" alt="${esc(item.title)}" ${sizeAttrs(item, [427, 990])} fetchpriority="high"></figure>` : ''}
   <div class="entry-body">
     ${item.summary ? `<p class="flavor">${esc(item.summary)}</p>` : ''}
-    ${item.fields.length ? `<dl class="stats">${item.fields.map((f) => `<div><dt>${esc(f.label)}</dt><dd${isNumeric(f.value) ? ' class="mono"' : ''}>${linked(content, f.value, item)}</dd></div>`).join('')}</dl>` : ''}
+    ${fields.length ? `<dl class="stats">${fields.map((f) => `<div><dt>${esc(f.label)}</dt><dd${isNumeric(f.value) ? ' class="mono"' : ''}>${linked(content, f.value, item)}</dd></div>`).join('')}</dl>` : ''}
+    ${category ? statBars(content, category, item) : ''}
     ${groupedAbilities(content, item).map((g) => `<section class="entry-section"><h2 class="with-badge">${badge(badgeForName(content, g.group))}${esc(g.group)}</h2>${g.html}</section>`).join('')}
     ${item.sections.map((s) => `<section class="entry-section"><h2>${esc(s.label)}</h2><div class="prose${/lore/i.test(s.label) ? ' prose--lore' : ''}">${paragraphs(s.value)}</div></section>`).join('')}
     ${item.body ? `<div class="prose entry-section">${paragraphs(item.body)}</div>` : ''}
@@ -433,6 +467,7 @@ export function itemPage(content, category, item) {
   return layout({
     content, meta, active: 'compendium',
     body: entry(content, item, {
+      category,
       crumbs: `<a href="/compendium">Compendium</a><span aria-hidden="true">/</span><a class="with-badge" href="/c/${esc(category.slug)}">${badge(category.badge)}${esc(category.name)}</a>`,
       pager: pagerFor(category.items, category.items.indexOf(item), (i) => hrefOf(category, i)),
     }),
