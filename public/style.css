@@ -142,6 +142,15 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 .stats div { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 16px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .stats dt { color: var(--muted); }
 .stats dd { margin: 0; white-space: pre-line; }
+/* Stats: numeric columns as bars, scaled to the tab's highest value (see statBars in render.js) */
+.entry-stats { margin-top: 0; margin-bottom: 36px; }
+.stat-bars { margin: 0; display: grid; gap: 10px; }
+.stat-bars div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; align-items: center; }
+.stat-bars dt { color: var(--muted); }
+.stat-bars dd { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) 4ch; gap: 12px; align-items: center; }
+.stat-track { display: block; height: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
+.stat-fill { display: block; height: 100%; background: var(--accent); }
+.stat-value { text-align: right; }
 .prose { max-width: 66ch; }
 .prose p + p { margin-top: 1em; }
 .legal h2 { font: 500 24px/1.2 var(--serif); margin: 2em 0 .6em; }
@@ -280,6 +289,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
   .filters input { width: 100%; }
   .filters [data-count] { margin-left: 0; }
   .stats div { grid-template-columns: 120px minmax(0, 1fr); }
+  .stat-bars div { grid-template-columns: 104px minmax(0, 1fr); gap: 12px; }
   .entry-name { min-width: 0; }
   .portraits { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .portrait strong { font-size: 16px; }

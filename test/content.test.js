@@ -51,7 +51,7 @@ test('an empty sheet produces an empty but valid site', () => {
 test('a tab with headers but no rows is an empty category', () => {
   const c = buildContent([{ name: 'Weapons', hidden: false, rows: [['Name', 'Damage']] }]);
   const [w] = c.categories;
-  assert.deepEqual({ ...w }, { name: 'Weapons', slug: 'weapons', columns: ['Name', 'Damage'], fields: ['Damage'], abilityLabels: [], tagLabel: 'Tags', items: [], description: '', view: 'table', badge: { icon: 'sword', text: '', color: 'red' } });
+  assert.deepEqual({ ...w }, { name: 'Weapons', slug: 'weapons', columns: ['Name', 'Damage'], fields: ['Damage'], statLabels: [], abilityLabels: [], tagLabel: 'Tags', items: [], description: '', view: 'table', badge: { icon: 'sword', text: '', color: 'red' } });
 });
 
 test('_pages tab: descriptions for top-level pages and categories, matched case-insensitively', () => {
@@ -92,6 +92,17 @@ test('long-text columns become prose sections, short ones stay stats', () => {
   assert.deepEqual(items[0].fields, [{ label: 'Effect', value: 'Heals.' }]);
   assert.deepEqual(items[0].sections, [{ label: 'Lore', value: long }]);
   assert.deepEqual(fields, ['Effect']);
+});
+
+test('numeric columns are listed as stats; mixed, blank and long columns are not', () => {
+  const { items, fields, statLabels } = tabToItems([
+    ['Character Name', 'Weapon', 'Health', 'Dex', 'Crit', 'Level', 'Empty', 'Notes Text'],
+    ['Albert', 'Saber', '16', '14', '5%', '12 (base)', '', 'x'.repeat(100)],
+    ['Zork', 'Cable', 19, 12, '7%', '', '', ''],
+  ]);
+  assert.deepEqual(statLabels, ['Health', 'Dex', 'Crit'], 'percentages count; "12 (base)" makes Level text; an empty column is not a stat');
+  assert.deepEqual(fields, ['Weapon', 'Health', 'Dex', 'Crit', 'Level', 'Empty'], 'stats stay in the ordinary field list too');
+  assert.deepEqual(items[1].fields, [{ label: 'Weapon', value: 'Cable' }, { label: 'Health', value: '19' }, { label: 'Dex', value: '12' }, { label: 'Crit', value: '7%' }]);
 });
 
 test('views: auto grid/list/table, overridable from _pages', () => {

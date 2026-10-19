@@ -40,6 +40,14 @@ and `Skill 2 (Level 12)`/`Skill 2 Description` show as a **Skills** section with
 Every other column becomes a labelled stat, unless its text is long on average (e.g. `Lore`), in which case it's a prose
 section. All-numeric columns sort numerically and align right in tables.
 
+**Stats:** columns whose every filled cell is a number (`Health`, `Stamina`, `Strength`, `Dex`, `Mind`, `Blood Caliber`,
+`Arcane`, …) are shown on the entry page as a **Stats** section, one bar per column, scaled so the tab's highest value for
+that column fills the bar. A cell like `12 (base)` makes the whole column plain text, so keep stat cells to the number.
+Portrait cards skip these and show the first two text columns instead. `templates/Stats.csv` has the network-test
+character stats in the Characters tab's row order: paste its seven value columns into **Characters** for the section on
+each character's page, and/or import it as a **Stats** tab for a sortable comparison table (its badge is then used on
+the Stats heading, like Skills and Aspects).
+
 **Cross-links:** an entry that shares its name with entries in other tabs (Albert in Characters, Weapons, Skills) links to
 them ("Also in …"), and any cell whose whole value is another entry's name links to that entry.
 
@@ -47,13 +55,13 @@ them ("Also in …"), and any cell whose whole value is another entry's name lin
 index, breadcrumbs, search results, and matching headings on entry pages (a character's **Skills** heading uses the Skills
 badge). It's picked from the tab name automatically; set it in `_pages` to override:
 
-- `Icon`: `person` `sword` `flask` `bolt` `drop` `page` `map` `skull` `shield` `book` `star` `crown` `moon` `gem`,
+- `Icon`: `person` `sword` `flask` `bolt` `drop` `page` `map` `skull` `shield` `book` `star` `crown` `moon` `gem` `chart`,
   or an emoji / one or two characters (e.g. `🦇`, `IV`). Anything else falls back to the automatic choice.
 - `Color`: `red` `amber` `green` `teal` `blue` `violet` `rose` `grey`.
 
 Press `/` anywhere to jump to search (or to the filter, on a category page).
 
-`templates/` has a CSV per suggested tab (`_site`, `_pages`, `News`, `Bloodsworn`, `Weapons`, `Locations`, `Enemies`).
+`templates/` has a CSV per suggested tab (`_site`, `_pages`, `News`, `Bloodsworn`, `Weapons`, `Locations`, `Enemies`, `Stats`).
 To add one, go to **File → Import → Upload → Insert new sheet(s)**. You can also just create tabs with your own headers.
 
 ## Local development
