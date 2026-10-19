@@ -80,6 +80,17 @@ document.addEventListener('keydown', (e) => {
   if (box) { e.preventDefault(); box.focus(); }
 });
 
+// Wide tables scroll sideways; fade the right edge while there's more to see.
+for (const wrap of document.querySelectorAll('.table-wrap')) {
+  const update = () => {
+    wrap.toggleAttribute('data-more', wrap.scrollLeft + wrap.clientWidth < wrap.scrollWidth - 1);
+    wrap.toggleAttribute('data-scrolled', wrap.scrollLeft > 0);
+  };
+  wrap.addEventListener('scroll', update, { passive: true });
+  addEventListener('resize', update);
+  update();
+}
+
 // On narrow screens the category tabs scroll sideways; start with the current one in view.
 const currentTab = document.querySelector('.tabs [aria-current]');
 if (currentTab) {

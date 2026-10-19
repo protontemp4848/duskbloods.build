@@ -105,6 +105,8 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 .filters [data-count] { margin-left: auto; }
 
 .table-wrap { overflow-x: auto; border-top: 1px solid var(--line); }
+/* More columns off to the right (app.js sets data-more): fade the edge until it's scrolled to the end. */
+.table-wrap[data-more] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
 .entries { width: 100%; border-collapse: collapse; }
 .entries th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); padding: 10px 12px; white-space: nowrap; }
 .entries th button { all: unset; cursor: pointer; }
@@ -116,6 +118,10 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 .entries td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .entries td:first-child { padding-left: 0; }
 .entries tbody tr:hover { background: var(--surface); }
+/* The name column stays put while a wide table scrolls sideways. */
+.entries th:first-child, .entries td:first-child { position: sticky; left: 0; z-index: 1; background: var(--bg); }
+.entries tbody tr:hover td:first-child { background: var(--surface); }
+.table-wrap[data-scrolled] .entries :is(th, td):first-child { box-shadow: 1px 0 0 var(--line); }
 .entries td.num { font-family: var(--mono); font-size: 13.5px; text-align: right; font-variant-numeric: tabular-nums; }
 .entries th.num { text-align: right; }
 .entry-name { min-width: 260px; }

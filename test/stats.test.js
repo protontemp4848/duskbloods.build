@@ -63,6 +63,8 @@ test('a Stats tab is a sortable, right-aligned table; its pages are canonicalise
   assert.deepEqual(stats.badge, { icon: 'chart', text: '', color: 'teal' });
   const html = render.categoryPage(content, stats);
   assert.match(html, /<th scope="col" class="num"><button type="button" data-sort="1">Health<\/button><\/th>/);
+  assert.deepEqual([...html.matchAll(/<th scope="col" class="num"><button type="button" data-sort="(\d+)">([^<]+)<\/button>/g)].map((m) => [Number(m[1]), m[2]]),
+    STATS.map((s, i) => [i + 1, s]), 'every stat column is in the table, not just the first five');
   assert.match(html, /<td class="num">19<\/td>/, 'Zork\'s health');
   const page = render.itemPage(content, stats, stats.items[0]);
   assert.match(page, /<link rel="canonical" href="[^"]*\/c\/characters\/albert">/);
