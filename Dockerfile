@@ -8,6 +8,7 @@ COPY public ./public
 # `docker build --target test .` runs the test suite inside the image.
 FROM base AS test
 COPY test ./test
+COPY templates ./templates
 RUN npm test
 
 # Downloads the sheet once, at build time; the build fails if it can't. deploy.sh never caches this stage.
