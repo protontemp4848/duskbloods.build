@@ -165,7 +165,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-strong); }
 
 /* Portrait grid (character-select style) */
 .portraits { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 8px; }
-.home-roster { margin-bottom: 48px; }
+.home-roster { margin-top: 48px; }
 .home-roster .portraits { margin-top: 16px; }
 .portrait { display: flex; flex-direction: column; text-decoration: none; }
 .portrait img, .portrait-blank {

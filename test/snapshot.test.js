@@ -24,7 +24,8 @@ test('home shows the character roster with portraits', () => {
   assert.equal(html.match(/class="portrait"/g).length, 6);
   assert.match(html, /<strong>Zork<\/strong>\s*<small>Undersea Cable · Speargun<\/small>/);
   assert.doesNotMatch(html, /class="release/, 'no release_date in the sheet, so no release line');
-  assert.match(html, /<main class="wrap">\s*<h1 class="visually-hidden">[^<]*<\/h1>\s*<section class="home-roster">/, 'roster is the first thing on the page');
+  assert.match(html, /<main class="wrap">\s*<h1 class="visually-hidden">[^<]*<\/h1>\s*<div class="home-cols">\s*<section>\s*<header class="section-head"><h2 class="with-badge">[\s\S]*?Updates<\/h2>/, 'updates and compendium come first');
+  assert.match(html, /<\/div>\s*<section class="home-roster">/, 'roster follows the updates/compendium columns');
 });
 
 test('Characters renders as a portrait grid; every entry is filterable', () => {
