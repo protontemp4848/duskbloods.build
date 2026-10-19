@@ -211,10 +211,6 @@ export function homePage(content, now = new Date()) {
   const body = `
 <h1 class="visually-hidden">${esc(site.game)} compendium${sections.length ? `: ${esc(sections.join(', '))} and more` : ''}</h1>
 ${release}
-${roster ? `<section class="home-roster">
-  <header class="section-head"><h2 class="with-badge">${badge(roster.badge)}${esc(roster.name)}</h2><a href="/c/${esc(roster.slug)}">View all</a></header>
-  ${portraitGrid(roster, roster.items.slice(0, 12), { eager: 6 })}
-</section>` : ''}
 <div class="home-cols">
   <section>
     <header class="section-head"><h2 class="with-badge">${badge(content.badges.updates)}Updates</h2>${news.length > 5 ? '<a href="/updates">All updates</a>' : ''}</header>
@@ -224,7 +220,11 @@ ${roster ? `<section class="home-roster">
     <header class="section-head"><h2>Compendium</h2><span class="mono muted">${plural(total, 'entry', 'entries')}</span></header>
     ${categoryIndex(categories)}
   </section>
-</div>`;
+</div>
+${roster ? `<section class="home-roster">
+  <header class="section-head"><h2 class="with-badge">${badge(roster.badge)}${esc(roster.name)}</h2><a href="/c/${esc(roster.slug)}">View all</a></header>
+  ${portraitGrid(roster, roster.items.slice(0, 12), { eager: 6 })}
+</section>` : ''}`;
   const meta = {
     title: `${site.title} - A build tool and companion for ${site.game}`,
     reportLabel: 'Home',
