@@ -18,6 +18,8 @@
 #   SHEET_ID    sheet downloaded into the image at build time (default: the Duskbloods sheet)
 #   SITE_URL    public origin for canonical/sitemap URLs, e.g. https://duskbloods.build (default: the request host)
 #   FEEDBACK_FORM_URL  Google Form pre-filled link for "Report a problem" (unset: the form is hidden)
+#   ANUBIS_KEY  64 hex chars (openssl rand -hex 32) signing Anubis's pass cookies; required by deploy, so a pass
+#               survives cold starts and works on every instance
 #   PORT        local port for `local` (default: 8080)
 #   RUNTIME_SA  account the service runs as (default: duskbloods-runtime@PROJECT_ID, which has no roles)
 #   DEPLOYER_SA account CI deploys as, for `setup` to grant roles to (e.g. duskbloods-build-sa@PROJECT_ID)
@@ -38,6 +40,9 @@ REGION="${REGION:-europe-west1}"
 SHEET_ID="${SHEET_ID:-15wyNicWMxF-fM4o-_m5uUODuEoL5WFaXnoZy_VNHOaA}"
 PORT="${PORT:-8080}"
 LOCAL_IMAGE="${SERVICE}:local"
+# Run locally there's no Google front end to set X-Forwarded-For, so Anubis reads the client IP off the socket, and
+# there's no https, so its cookies can't be Secure (nor Partitioned, which Anubis turns on by default and needs Secure).
+LOCAL_ANUBIS=(-e USE_REMOTE_ADDRESS=true -e COOKIE_SECURE=false -e COOKIE_SAME_SITE=Lax -e COOKIE_PARTITIONED=false)
 
 TAG="$(git rev-parse --short HEAD 2>/dev/null || echo manual)"
 # Uncommitted changes get a -dirty tag (Cloud Run pins the image digest at deploy time either way).
@@ -85,14 +90,14 @@ cmd_local() {
     args=(-e SHEET_FILE=/data/sample.xlsx -v "$PWD/sample.xlsx:/data/sample.xlsx:ro")
   fi
   log "Serving on http://localhost:${PORT} (Ctrl-C to stop)"
-  docker run --rm -it --init -p "${PORT}:8080" ${args[@]+"${args[@]}"} "$LOCAL_IMAGE"
+  docker run --rm -it --init -p "${PORT}:8080" "${LOCAL_ANUBIS[@]}" ${args[@]+"${args[@]}"} "$LOCAL_IMAGE"
 }
 
 # Starts the container, waits for /health, and checks each page type returns the expected status.
 smoke_check() {
   local label="$1"; shift
   local name="${SERVICE}-smoke-$$" port
-  docker run -d --rm --name "$name" -p 127.0.0.1::8080 ${@+"$@"} "$LOCAL_IMAGE" >/dev/null
+  docker run -d --rm --name "$name" -p 127.0.0.1::8080 "${LOCAL_ANUBIS[@]}" ${@+"$@"} "$LOCAL_IMAGE" >/dev/null
   # shellcheck disable=SC2064 # expand $name now: it's local and gone by the time the trap fires
   trap "docker rm -f $name >/dev/null 2>&1 || true" RETURN
   port="$(docker port "$name" 8080 | head -1 | sed 's/.*://')"
@@ -109,6 +114,14 @@ smoke_check() {
   echo "  health: $(curl -s "$base/health")"
   local path want
   for spec in "${SMOKE_PATHS[@]}"; do read -r path want <<<"$spec"; check "$path" "$want"; done
+  # Anubis answers 200 either way, so these look at the page: browsers get a challenge, AI crawlers the deny page.
+  anubis_check() {
+    local label="$1" ua="$2" path="$3" want="$4"
+    if curl -s -A "$ua" "$base$path" | grep -q "$want"; then echo "  ok   $label $path"; else echo "  FAIL $label $path (no '$want')"; failures=$((failures + 1)); fi
+  }
+  anubis_check "browser challenged" "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0" / "Making sure you&#39;re not a bot"
+  anubis_check "GPTBot denied     " "Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)" / "Oh noes"
+  anubis_check "browser gets css  " "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0" /static/style.css "font-family"
   [[ $failures == 0 ]] || { docker logs "$name" | tail -20; die "Smoke test (${label}) failed"; }
 }
 
@@ -229,6 +242,8 @@ cmd_push() {
 
 cmd_deploy() {
   cloud_config
+  [[ "${ANUBIS_KEY:-}" =~ ^[0-9a-f]{64}$ ]] || [[ "${DRY_RUN:-}" == 1 ]] \
+    || die "ANUBIS_KEY must be 64 hex characters (make one with: openssl rand -hex 32)"
   log "Deploying ${IMAGE}:${TAG} to Cloud Run service ${SERVICE} (${REGION})"
   run gcloud run deploy "$SERVICE" \
     --project "$PROJECT_ID" \
@@ -239,7 +254,8 @@ cmd_deploy() {
     --port 8080 \
     --cpu 1 --memory 256Mi \
     --min-instances 0 --max-instances 3 \
-    --set-env-vars "^@^SITE_URL=${SITE_URL:-}@FEEDBACK_FORM_URL=${FEEDBACK_FORM_URL:-}"
+    --session-affinity \
+    --set-env-vars "^@^SITE_URL=${SITE_URL:-}@FEEDBACK_FORM_URL=${FEEDBACK_FORM_URL:-}@ANUBIS_KEY=${ANUBIS_KEY:-}"
   [[ "${DRY_RUN:-}" == 1 ]] || log "Live at: $(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')"
 }
 
@@ -253,5 +269,5 @@ case "${1:-}" in
   push) cmd_push ;;
   deploy) cmd_deploy ;;
   all) cmd_smoke && cmd_push && cmd_deploy ;;
-  *) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
