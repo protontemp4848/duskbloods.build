@@ -4,6 +4,7 @@
 #   GOOGLE_CLOUD_PROJECT       GCP project id (duskbloods-build)
 #   CLOUD_RUN_NAME             Cloud Run service name
 #   CLOUD_RUN_SERVICE_ACCOUNT  JSON key of the deploy account (duskbloods-build-sa)
+#   ANUBIS_KEY                 signs Anubis's pass cookies; make one with: openssl rand -hex 32
 # Optional repository variables: REGION (default europe-west1), SHEET_ID (default: the Duskbloods sheet),
 #   SITE_URL (public origin for canonical/sitemap URLs once there's a custom domain),
 #   FEEDBACK_FORM_URL (Google Form pre-filled link that receives "Report a problem" submissions).
@@ -51,6 +52,7 @@ jobs:
       REGION: ${{ vars.REGION || 'europe-west1' }}
       SHEET_ID: ${{ vars.SHEET_ID }} # empty -> deploy.sh's built-in sheet id
       SITE_URL: ${{ vars.SITE_URL }} # e.g. https://duskbloods.build; empty -> canonical URLs use the request host
+      ANUBIS_KEY: ${{ secrets.ANUBIS_KEY }}
       FEEDBACK_FORM_URL: ${{ vars.FEEDBACK_FORM_URL || secrets.FEEDBACK_FORM_URL }} # Google Form pre-filled link (variable or secret); empty -> no "Report a problem" form
     steps:
       - uses: actions/checkout@v7
@@ -63,6 +65,7 @@ jobs:
           [ -n "$PROJECT_ID" ] || missing="$missing GOOGLE_CLOUD_PROJECT"
           [ -n "$SERVICE" ] || missing="$missing CLOUD_RUN_NAME"
           [ "$HAS_KEY" = "true" ] || missing="$missing CLOUD_RUN_SERVICE_ACCOUNT"
+          [ -n "$ANUBIS_KEY" ] || missing="$missing ANUBIS_KEY"
           if [ -n "$missing" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
           [ -n "$FEEDBACK_FORM_URL" ] || echo "::warning::FEEDBACK_FORM_URL is not set; the Report a problem form will be hidden"
 
@@ -89,4 +92,7 @@ jobs:
             [ "$code" = "200" ] || { echo "::error::$path returned $code"; exit 1; }
           done
           curl -sf "$url/health"
+          # A browser should get Anubis's challenge rather than the site.
+          curl -s -A 'Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0' "$url/" | grep -q "not a bot" \
+            || { echo "::error::A browser user agent wasn't challenged: Anubis isn't in front of the site"; exit 1; }
           echo "### Deployed to $url" >> "$GITHUB_STEP_SUMMARY"

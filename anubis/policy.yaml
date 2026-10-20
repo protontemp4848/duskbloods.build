@@ -1,0 +1,93 @@
+# Anubis bot policy for duskbloods.build: Anubis's default policy (v1.28.1 data/botPolicies.yaml) with our own
+# allow rules in front. Anything with a browser user agent gets a short proof-of-work challenge once a week; named AI
+# crawlers are denied; verified search engines are let through. Scripts that don't claim to be a browser (curl, uptime
+# checks) aren't challenged at all: that's Anubis's design, and robots.txt is what asks them to stay off /api/.
+bots:
+  # Cloud Run and CI probe this; it's not a page.
+  - name: health
+    path_regex: ^/health$
+    action: ALLOW
+  # Fonts, CSS, JS and og.png: nothing worth scraping, and link unfurlers (Discord claims to be a browser) fetch og.png.
+  - name: static-assets
+    path_regex: ^/static/
+    action: ALLOW
+  # AdSense checks ads.txt and reads pages to pick ads; a challenged ad crawler means blank ad slots. Matched by user
+  # agent only: spoofing it buys a scraper nothing a non-browser user agent doesn't already get.
+  - name: ads-txt
+    path_regex: ^/ads\.txt$
+    action: ALLOW
+  - name: adsense
+    user_agent_regex: Mediapartners-Google|AdsBot-Google
+    action: ALLOW
+
+  # From here on, Anubis's default policy.
+  - import: (data)/bots/_deny-pathological.yaml
+  - import: (data)/bots/aggressive-brazilian-scrapers.yaml
+  - import: (data)/common/domain-fronting.yaml
+  - import: (data)/meta/ai-block-aggressive.yaml
+  - import: (data)/crawlers/_allow-good.yaml
+  - import: (data)/clients/x-firefox-ai.yaml
+  - import: (data)/crawlers/xai.yaml
+  - import: (data)/common/keep-internet-working.yaml
+  # The default's GeoIP and ASN weighting rules are left out: they need Techaro's paid Thoth service.
+  - name: generic-browser
+    user_agent_regex: Mozilla|Opera
+    action: WEIGH
+    weight:
+      adjust: 10
+
+dnsbl: false
+
+# Challenge pages carry the real page's og: tags, so links shared in Discord and friends still get a preview card.
+openGraph:
+  enabled: true
+  considerHost: false
+  ttl: 24h
+
+status_codes:
+  CHALLENGE: 200
+  DENY: 200
+
+# In memory, per instance: a challenge must be solved on the instance that issued it, which is why deploy.sh turns
+# on session affinity. Pass cookies are signed with ANUBIS_KEY, so once passed they're good on every instance.
+store:
+  backend: memory
+  parameters: {}
+
+thresholds:
+  - name: minimal-suspicion
+    expression: weight <= 0
+    action: ALLOW
+  - name: mild-suspicion
+    expression:
+      all:
+        - weight > 0
+        - weight < 10
+    action: CHALLENGE
+    challenge:
+      algorithm: metarefresh
+      difficulty: 1
+  - name: moderate-suspicion
+    expression:
+      all:
+        - weight >= 10
+        - weight < 20
+    action: CHALLENGE
+    challenge:
+      algorithm: fast
+      difficulty: 2
+  - name: mild-proof-of-work
+    expression:
+      all:
+        - weight >= 20
+        - weight < 30
+    action: CHALLENGE
+    challenge:
+      algorithm: fast
+      difficulty: 4
+  - name: extreme-suspicion
+    expression: weight >= 30
+    action: CHALLENGE
+    challenge:
+      algorithm: fast
+      difficulty: 6
