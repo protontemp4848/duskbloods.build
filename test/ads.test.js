@@ -32,14 +32,16 @@ async function serve(content) {
 // The live sheet as Google reviewed it: copied game text and art, no commentary.
 const live = buildContent(readWorkbook(readFileSync(new URL('./fixtures/google-snapshot.xlsx', import.meta.url))));
 
-// The sample sheet plus a Commentary column (one entry long enough, one too short) and one long news post.
-const withCommentary = buildContent(sampleTabs.map((tab) => {
+// The sample sheet plus a Commentary column (one entry long enough, one too short), one long news post, a long intro
+// for Weapons, a short one for Bloodsworn, and a long one for an empty category.
+const withCommentary = buildContent([...sampleTabs.map((tab) => {
   if (tab.name === 'Weapons') {
     return { ...tab, rows: [['Name', 'Damage', 'Commentary'], ['Long Take', 120, words(MIN_OWN_WORDS)], ['Short Take', 90, words(MIN_OWN_WORDS - 1)], ['No Take', 80, '']] };
   }
   if (tab.name === 'News') return { ...tab, rows: [...tab.rows, [{ date: 46320 }, 'Long post', 'Summary', words(MIN_OWN_WORDS)]] };
+  if (tab.name === '_pages') return { ...tab, rows: [...tab.rows, ['Weapons', words(MIN_OWN_WORDS)], ['Empty', words(MIN_OWN_WORDS)]] };
   return tab;
-}));
+}), { name: 'Empty', rows: [['Name']] }]);
 
 let liveSite, site;
 before(async () => { [liveSite, site] = await Promise.all([serve(live), serve(withCommentary)]); });
@@ -51,10 +53,12 @@ test('the live sheet as reviewed has no page that loads ads', async () => {
   for (const path of paths) assert.doesNotMatch(await liveSite.get(path), AD_SCRIPT, path);
 });
 
-test('ads load only on entries and posts with enough of the editor\'s own words', async () => {
+test('ads load only on entries, posts and categories with enough of the editor\'s own words', async () => {
+  assert.ok(withCommentary.categories.find((c) => c.slug === 'bloodsworn').description, 'Bloodsworn has a short intro');
+  assert.ok(withCommentary.categories.find((c) => c.slug === 'empty'), 'the empty category is rendered');
   const withAds = [];
   for (const path of allPaths(withCommentary)) if (AD_SCRIPT.test(await site.get(path))) withAds.push(path);
-  assert.deepEqual(withAds.sort(), ['/c/weapons/long-take', '/updates/long-post']);
+  assert.deepEqual(withAds.sort(), ['/c/weapons', '/c/weapons/long-take', '/updates/long-post']);
 });
 
 test('commentary is shown under its own heading and is searchable', async () => {

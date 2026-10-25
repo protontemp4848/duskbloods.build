@@ -8,8 +8,9 @@ import { isNumeric } from './content.js';
 export const ADSENSE_CLIENT = 'ca-pub-3267360964563410';
 
 // AdSense refuses ads on screens that only reproduce others' content (the game's own text and art) or that are
-// navigation, search or error screens. So ads only go on an entry or news post holding at least this many words of
-// the editor's own writing: an entry's Commentary column, or a news post's body.
+// navigation, search or error screens. So ads only go on a page holding at least this many words of the editor's own
+// writing: an entry's Commentary column, a news post's body, or a category's _pages description (the intro that says
+// what the comparison shows, so the page reads as curation rather than a list of links; never on an empty category).
 export const MIN_OWN_WORDS = 150;
 const wordCount = (text) => String(text ?? '').split(/\s+/).filter(Boolean).length;
 export const hasOwnContent = (text) => wordCount(text) >= MIN_OWN_WORDS;
@@ -403,6 +404,7 @@ ${view}
   const path = `/c/${category.slug}`;
   const meta = {
     reportLabel: category.name,
+    ads: category.items.length > 0 && hasOwnContent(category.description),
     lcpImage: category.view === 'grid' ? seo.absUrl(origin, category.items.find((i) => i.image)?.image) : undefined,
     title: seo.fullTitle(category.items.length > 1 ? `All ${category.items.length} ${category.name} in ${site.game}` : `${category.name} in ${site.game}`, site),
     description: seo.describeCategory(category, site),
