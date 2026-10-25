@@ -12,6 +12,8 @@
 // Recognised columns (case-insensitive, spaces/dashes ignored):
 //   name|title (else any "... Name")  slug  image|picture|portrait (else any "... Picture/Image")
 //   summary|description  body|details|content  tags|type  date  link|url|source  draft (TRUE hides the row)
+//   commentary|analysis|strategy|tips   the editor's own writing about the entry (not copied game text); an entry
+//   page only carries ads when this holds enough words (render.js, MIN_OWN_WORDS)
 //
 // Images: a URL in the image column, or a picture placed in the row (Insert > Image in Google Sheets; best in the
 // image column). Placed pictures are served from /media/<content-hash>.<ext>.
@@ -34,6 +36,7 @@ const ALIASES = {
   date: ['date', 'published', 'publishedat'],
   link: ['link', 'url', 'source'],
   draft: ['draft', 'hidden'],
+  commentary: ['commentary', 'analysis', 'strategy', 'tips'],
 };
 
 // Override any of these with _site rows (game, game_platform, game_developer, game_publisher feed structured data).
@@ -170,6 +173,7 @@ export function tabToItems(rows, { images = [], media = new Map() } = {}) {
       tags: get(role.tags).split(',').map((t) => t.trim()).filter(Boolean),
       date: get(role.date),
       link: safeUrl(get(role.link)),
+      commentary: get(role.commentary) ? { label: role.commentary.label, value: get(role.commentary) } : null,
       fields: rest.filter((c) => !longCols.has(c.i) && get(c)).map((c) => ({ label: c.label, value: get(c) })),
       sections: rest.filter((c) => longCols.has(c.i) && get(c)).map((c) => ({ label: c.label, value: get(c) })),
       abilities: pairs.filter((p) => get(p.nameCol) || get(p.descCol))

@@ -33,6 +33,12 @@ The first non-blank row of a tab is its header row. These column names have spec
 | `Link` / `Source` | "Source ↗" button |
 | `Slug` | Override the URL slug (defaults to the title) |
 | `Draft` | `TRUE` hides the row |
+| `Commentary` / `Analysis` / `Strategy` / `Tips` | **Your own writing** about the entry: how to play it, what it's good against, build advice. Shown as its own section. Never paste game text here: it's what decides where ads go (below) |
+
+**Ads:** AdSense won't serve ads on pages that only repeat someone else's content (the game's text and art) or on
+navigation, search and error pages. So the ad script is only loaded on an entry page whose `Commentary` holds at least
+150 words (`MIN_OWN_WORDS` in `src/render.js`), and on a news post whose `Body` does. Every other page (home,
+compendium, categories, search, privacy, 404) has no ads.
 
 **Paired columns:** a column `X` next to `X Description` becomes one ability, grouped by name, so `Skill 1`/`Skill 1 Description`
 and `Skill 2 (Level 12)`/`Skill 2 Description` show as a **Skills** section with two titled blocks (brackets become a note: "Level 12").

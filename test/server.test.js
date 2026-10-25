@@ -25,7 +25,7 @@ test('home page renders site, countdown, news and categories', async () => {
   const r = await get('/');
   assert.equal(r.status, 200);
   assert.match(r.csp, /script-src 'self' https:;/);
-  assert.match(r.text, /<script async src="https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-3267360964563410" crossorigin="anonymous"><\/script>\n<\/head>/);
+  assert.doesNotMatch(r.text, /adsbygoogle/, 'no ads on the home page: it is navigation (see ads.test.js)');
   assert.match(r.text, /<title>Duskbloods\.build - A build tool and companion for The Duskbloods<\/title>/);
   assert.match(r.text, /<meta property="og:title" content="Duskbloods\.build - A build tool and companion for The Duskbloods">/);
   assert.match(r.text, /Sample tagline &lt;b&gt;escaped&lt;\/b&gt;/);

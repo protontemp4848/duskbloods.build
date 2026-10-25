@@ -4,8 +4,15 @@ import { asset } from './assets.js';
 import * as seo from './seo.js';
 import { isNumeric } from './content.js';
 
-// Google AdSense publisher ID: loads the ad script on every page and backs /ads.txt.
+// Google AdSense publisher ID: backs /ads.txt, and loads the ad script on pages that pass hasOwnContent().
 export const ADSENSE_CLIENT = 'ca-pub-3267360964563410';
+
+// AdSense refuses ads on screens that only reproduce others' content (the game's own text and art) or that are
+// navigation, search or error screens. So ads only go on an entry or news post holding at least this many words of
+// the editor's own writing: an entry's Commentary column, or a news post's body.
+export const MIN_OWN_WORDS = 150;
+const wordCount = (text) => String(text ?? '').split(/\s+/).filter(Boolean).length;
+export const hasOwnContent = (text) => wordCount(text) >= MIN_OWN_WORDS;
 
 export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -86,7 +93,8 @@ function linked(content, value, self) {
 
 /* ---------- Layout ---------- */
 
-// meta: { title, ogTitle, description, path (canonical), image, imageAlt, card, type, noindex, jsonld: [nodes], published, lcpImage }
+// meta: { title, ogTitle, description, path (canonical), image, imageAlt, card, type, noindex, jsonld: [nodes], published, lcpImage,
+//         ads (load AdSense; only set where hasOwnContent() holds) }
 function layout({ content, meta, body, active = '', q = '' }) {
   const { site, origin } = content;
   const canonical = meta.path ? `${origin}${meta.path}` : '';
@@ -121,7 +129,7 @@ ${meta.lcpImage ? `${new URL(meta.lcpImage, origin || 'http://localhost').origin
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="${asset('apple-touch-icon.png')}">
 ${seo.jsonLdTag([...seo.siteGraph(content), ...(meta.jsonld ?? [])])}
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}" crossorigin="anonymous"></script>
+${meta.ads ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}" crossorigin="anonymous"></script>` : ''}
 </head>
 <body>
 <header class="bar">
@@ -430,6 +438,7 @@ function entry(content, item, { crumbs, pager = '', category = null }) {
     ${fields.length ? `<dl class="stats">${fields.map((f) => `<div><dt>${esc(f.label)}</dt><dd${isNumeric(f.value) ? ' class="mono"' : ''}>${linked(content, f.value, item)}</dd></div>`).join('')}</dl>` : ''}
     ${category ? statBars(content, category, item) : ''}
     ${groupedAbilities(content, item).map((g) => `<section class="entry-section"><h2 class="with-badge">${badge(badgeForName(content, g.group))}${esc(g.group)}</h2>${g.html}</section>`).join('')}
+    ${item.commentary ? `<section class="entry-section"><h2>${esc(item.commentary.label)}</h2><div class="prose">${paragraphs(item.commentary.value)}</div></section>` : ''}
     ${item.sections.map((s) => `<section class="entry-section"><h2>${esc(s.label)}</h2><div class="prose${/lore/i.test(s.label) ? ' prose--lore' : ''}">${paragraphs(s.value)}</div></section>`).join('')}
     ${item.body ? `<div class="prose entry-section">${paragraphs(item.body)}</div>` : ''}
     ${item.link ? `<p><a class="source" href="${esc(item.link)}" rel="noopener">Source ↗</a></p>` : ''}
@@ -466,6 +475,7 @@ export function itemPage(content, category, item) {
     lcpImage: seo.absUrl(origin, item.image),
     imageAlt: item.image ? item.title : undefined,
     card: item.image ? 'summary' : undefined, // portraits crop badly in large cards
+    ads: hasOwnContent(item.commentary?.value),
     jsonld: [
       seo.breadcrumbs(origin, [['Compendium', '/compendium'], [category.name, `/c/${category.slug}`], [item.title]]),
       { '@type': 'ItemPage', '@id': `${origin}${path}#page`, url: `${origin}${path}`, name: item.title, description, isPartOf: { '@id': `${origin}/#website` },
@@ -503,6 +513,7 @@ export function postPage(content, post) {
   const description = seo.clip(!seo.isPlaceholder(post.summary) ? post.summary : post.body || post.title);
   const meta = {
     title: seo.fullTitle(post.title, site), description, path, type: 'article', published: date,
+    ads: hasOwnContent(post.body),
     reportLabel: `Updates › ${post.title}`,
     image: seo.absUrl(origin, post.image) || undefined,
     jsonld: [

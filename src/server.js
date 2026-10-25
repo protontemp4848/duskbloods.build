@@ -61,6 +61,7 @@ export function search(content, q) {
         ...item.fields.map((f) => [f.label, f.value, true]),
         ...item.abilities.flatMap((a) => [[a.label, a.name, true, `${a.name} — ${a.text}`], [a.label, a.text, false, `${a.name} — ${a.text}`]]),
         ...item.sections.map((s) => [s.label, s.value, false]),
+        ...(item.commentary ? [[item.commentary.label, item.commentary.value, false]] : []),
       ].filter(([, v]) => v);
       const hay = [item.title, ...parts.map(([, v]) => v)].join(' ').toLowerCase();
       if (!terms.every((t) => hay.includes(t))) continue;
