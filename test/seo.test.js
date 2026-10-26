@@ -7,7 +7,7 @@ import { gunzipSync, brotliDecompressSync } from 'node:zlib';
 import { createApp } from '../src/server.js';
 import { readWorkbook } from '../src/xlsx.js';
 import { buildContent } from '../src/content.js';
-import { clip, describeItem, isPlaceholder, originFor } from '../src/seo.js';
+import { canonicalPathFor, clip, describeItem, isPlaceholder, originFor } from '../src/seo.js';
 
 const content = buildContent(readWorkbook(readFileSync(new URL('./fixtures/google-snapshot.xlsx', import.meta.url))));
 const ORIGIN = 'https://duskbloods.example';
@@ -76,6 +76,23 @@ test('duplicate entries canonicalise to the full page and stay out of the sitema
     assert.equal(r.status, 200);
     assert.equal(canonicalOf(r.text), `${ORIGIN}/c/characters/albert`);
   }
+});
+
+test('duplicates still find the full page when another same-titled entry ties it but holds different data', () => {
+  const entry = (slug, { fields = [], abilities = [], image = '' }) => ({ title: 'Albert', slug, summary: '', image, fields, abilities, sections: [] });
+  const skill = { group: 'Skills', name: 'Blood Blade', text: 'Fires off a blade.' };
+  const aspect = { group: 'Aspects', name: 'Upriser', text: 'Increases stagger.' };
+  const weapon = { label: 'Primary Weapon', value: 'Saber' };
+  // Stats-only page: same weight as Characters (7), comes first, and nothing is a subset of it.
+  const attributes = { slug: 'attributes', items: [entry('albert', { fields: ['Health', 'Stamina', 'Strength', 'Dex', 'Mind', 'Caliber', 'Arcane'].map((label) => ({ label, value: '1' })) })] };
+  const characters = { slug: 'characters', items: [entry('albert', { image: 'a.jpg', fields: [weapon], abilities: [skill, skill, aspect, aspect] })] };
+  const skills = { slug: 'skills', items: [entry('albert', { image: 'a.jpg', abilities: [skill] })] };
+  const weapons = { slug: 'weapons', items: [entry('albert', { image: 'a.jpg', fields: [weapon] })] };
+  const fake = { categories: [attributes, characters, skills, weapons] };
+  assert.equal(canonicalPathFor(fake, skills, skills.items[0]), '/c/characters/albert');
+  assert.equal(canonicalPathFor(fake, weapons, weapons.items[0]), '/c/characters/albert');
+  assert.equal(canonicalPathFor(fake, attributes, attributes.items[0]), '/c/attributes/albert');
+  assert.equal(canonicalPathFor(fake, characters, characters.items[0]), '/c/characters/albert');
 });
 
 test('category pages have their own h1 and list their entries in JSON-LD', async () => {

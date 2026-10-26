@@ -102,8 +102,12 @@ export function canonicalEntries(content) {
   const map = new Map();
   for (const list of byTitle.values()) {
     if (list.length < 2) continue;
-    const [best] = [...list].sort((a, b) => weight(b) - weight(a));
-    for (const e of list) if (e !== best && weight(e) < weight(best) && isSubset(e.item, best.item)) map.set(e.item, best);
+    // Heaviest first, so each entry points at the fullest page that contains it (not just the heaviest page overall).
+    const sorted = [...list].sort((a, b) => weight(b) - weight(a));
+    for (const e of list) {
+      const best = sorted.find((o) => o !== e && weight(o) > weight(e) && isSubset(e.item, o.item));
+      if (best) map.set(e.item, best);
+    }
   }
   canonicalCache.set(content.categories, map);
   return map;
