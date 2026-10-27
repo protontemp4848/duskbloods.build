@@ -175,7 +175,7 @@ const pageIntro = (text) => (seo.isPlaceholder(text) ? '' : `<div class="page-de
 // Attributes the client-side filter reads.
 function filterAttrs(item, extra = []) {
   const text = [item.title, item.summary, ...extra, ...item.tags, ...item.fields.map((f) => f.value),
-    ...item.abilities.flatMap((a) => [a.name, a.text]), ...item.sections.map((s) => s.value)].join(' ').toLowerCase();
+    ...item.abilities.flatMap((a) => [a.name, a.text]), ...item.sections.map((s) => s.value), item.body, ...item.levels.map((l) => `lv.${l.level} ${l.text}`)].join(' ').toLowerCase();
   return `data-entry data-search="${esc(oneLine(text))}" data-tags="${esc(item.tags.join('|').toLowerCase())}"`;
 }
 
@@ -331,9 +331,18 @@ function entryList(content, category) {
     ${item.summary ? `<p class="flavor flavor--sm">${esc(item.summary)}</p>` : ''}
     ${item.fields.length ? `<dl class="inline-stats">${item.fields.map((f) => `<div><dt>${esc(f.label)}</dt><dd>${linked(content, f.value, item)}</dd></div>`).join('')}</dl>` : ''}
     ${groupedAbilities(content, item, { compact: true }).map((g) => g.html).join('')}
+    ${item.body ? `<div class="prose prose--list">${paragraphs(item.body)}</div>` : ''}
+    ${levelsTable(item)}
     ${item.sections.map((s) => `<details class="more"><summary>${esc(s.label)}</summary><div class="prose">${paragraphs(s.value)}</div></details>`).join('')}
   </div>
 </article>`; }).join('')}</div>`;
+}
+
+
+// "Lv.N: ..." lines pulled out of the body (content.js) as a small table, so unlocks are easy to scan.
+function levelsTable(item) {
+  if (!item.levels?.length) return '';
+  return `<table class="levels"><caption>${esc(item.levelsCaption || 'Levels')}</caption><thead><tr><th class="num">Lv.</th><th>Unlocks</th></tr></thead><tbody>${item.levels.map((l) => `<tr><td class="num">${l.level}</td><td>${esc(l.text)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function entryTable(content, rows, category, { extraHead = '', extraCell = () => '' } = {}) {
@@ -432,6 +441,7 @@ function entry(content, item, { crumbs, pager = '', category = null }) {
     ${groupedAbilities(content, item).map((g) => `<section class="entry-section"><h2 class="with-badge">${badge(badgeForName(content, g.group))}${esc(g.group)}</h2>${g.html}</section>`).join('')}
     ${item.sections.map((s) => `<section class="entry-section"><h2>${esc(s.label)}</h2><div class="prose${/lore/i.test(s.label) ? ' prose--lore' : ''}">${paragraphs(s.value)}</div></section>`).join('')}
     ${item.body ? `<div class="prose entry-section">${paragraphs(item.body)}</div>` : ''}
+    ${levelsTable(item)}
     ${item.link ? `<p><a class="source" href="${esc(item.link)}" rel="noopener">Source ↗</a></p>` : ''}
     ${related.length ? `<p class="also-in">Also in ${related.map((r) => `<a class="with-badge" href="${hrefOf(r.category, r.item)}">${badge(r.category.badge)}${esc(r.category.name)}</a>`).join(' ')}</p>` : ''}
   </div>

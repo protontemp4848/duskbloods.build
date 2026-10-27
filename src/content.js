@@ -11,7 +11,8 @@
 //
 // Recognised columns (case-insensitive, spaces/dashes ignored):
 //   name|title (else any "... Name")  slug  image|picture|portrait (else any "... Picture/Image")
-//   summary|description  body|details|content  tags|type  date  link|url|source  draft (TRUE hides the row)
+//   summary|description  body|details|caption (else any "... Body/Details/Caption")  tags|type  date  link|url|source
+//   draft (TRUE hides the row). CamelCase headers ("BuddyInfo") are shown with spaces ("Buddy Info").
 //
 // Images: a URL in the image column, or a picture placed in the row (Insert > Image in Google Sheets; best in the
 // image column). Placed pictures are served from /media/<content-hash>.<ext>.
@@ -29,7 +30,7 @@ const ALIASES = {
   slug: ['slug', 'id'],
   image: ['image', 'imageurl', 'icon', 'thumbnail', 'picture', 'profilepicture', 'portrait', 'avatar', 'photo'],
   summary: ['summary', 'description', 'short'],
-  body: ['body', 'details', 'content', 'notes'],
+  body: ['body', 'details', 'content', 'notes', 'caption'],
   tags: ['tags', 'type', 'category'],
   date: ['date', 'published', 'publishedat'],
   link: ['link', 'url', 'source'],
@@ -47,6 +48,8 @@ export const DEFAULT_SITE = {
 };
 
 const normKey = (s) => String(s).toLowerCase().replace(/[\s_\-]+/g, '');
+// "BuddyInfo" -> "Buddy Info", for labels; keys ignore spacing anyway.
+const humanize = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1 $2');
 
 export function slugify(s) {
   return String(s)
@@ -79,6 +82,25 @@ function uniqueSlug(base, used) {
 }
 
 const LONG_TEXT = 80; // average characters above which a column is prose, not a stat
+
+// Lines like "- Lv.4: Firestorm" / "Lv.3 Master's Shield" in a Body become a levels table ({ level, text } rows), pulled out
+// of the prose. The line right before the first one, if it ends with ":", is the table's caption.
+const LEVEL_LINE = /^[-\u2022*]?\s*(?:lv\.?|level)\s*(\d+)\s*[:\-\u2013]?\s*(\S.*?)\s*$/iu;
+function extractLevels(text) {
+  const keep = [];
+  const levels = [];
+  let caption = '';
+  for (const line of String(text).split(/\r?\n/)) {
+    const m = LEVEL_LINE.exec(line.trim());
+    if (!m) { keep.push(line); continue; }
+    if (!levels.length) {
+      const last = keep.findLastIndex((l) => l.trim());
+      if (last >= 0 && /:$/.test(keep[last].trim())) caption = keep.splice(last)[0].trim().replace(/:$/, '');
+    }
+    levels.push({ level: Number(m[1]), text: m[2] });
+  }
+  return { body: keep.join('\n').replace(/\n{3,}/g, '\n\n').trim(), levels, levelsCaption: caption };
+}
 export const isNumeric = (v) => /^-?\d+(\.\d+)?%?$/.test(String(v).trim());
 
 // "Skill 2 (Level 12)" -> { base: "Skill 2", note: "Level 12" }
@@ -119,7 +141,7 @@ export function tabToItems(rows, { images = [], media = new Map() } = {}) {
   const [header = [], ...body] = trimRows(rows);
   // Sheet row index of body[0], to match pictures (anchored by sheet row) to entries.
   const firstBodyRow = rows.findIndex((r) => r.some((c) => String(c ?? '').trim())) + 1;
-  const columns = header.map((label, i) => ({ label, key: normKey(label), i })).filter((c) => c.label);
+  const columns = header.map((label, i) => ({ label: humanize(label), key: normKey(label), i })).filter((c) => c.label);
   const role = {};
   for (const [r, names] of Object.entries(ALIASES)) {
     const col = names.map((n) => columns.find((c) => c.key === n)).find(Boolean);
@@ -127,6 +149,7 @@ export function tabToItems(rows, { images = [], media = new Map() } = {}) {
   }
   role.title ??= columns.find((c) => c.key.endsWith('name'));
   role.image ??= columns.find((c) => /(picture|portrait|image)$/.test(c.key));
+  role.body ??= columns.find((c) => /(body|details|caption)$/.test(c.key));
   const titleCol = role.title ?? columns[0];
   const special = new Set(Object.values(role).filter(Boolean).map((c) => c.i));
   if (titleCol) special.add(titleCol.i);
@@ -166,7 +189,7 @@ export function tabToItems(rows, { images = [], media = new Map() } = {}) {
       image: url || (picture ? storeImage(media, picture) : ''),
       imageSize: picture?.size ?? null, // [width, height] when known
       summary: get(role.summary),
-      body: get(role.body),
+      ...extractLevels(get(role.body)), // body, levels, levelsCaption
       tags: get(role.tags).split(',').map((t) => t.trim()).filter(Boolean),
       date: get(role.date),
       link: safeUrl(get(role.link)),
@@ -223,13 +246,13 @@ function readPagesTab(rows) {
 // so abilities with no stats (e.g. a Skills tab with the character's portrait) are a list, with the picture as an icon.
 // Likewise when the pictures are mostly an earlier tab's (a Weapons tab reusing the Characters portraits): one gallery is enough.
 function autoView({ items, fields, abilityLabels }, reused) {
-  const prose = items.some((i) => i.sections.length);
+  const prose = items.some((i) => i.sections.length || i.body || i.levels.length);
   const onlyAbilities = abilityLabels.length && !fields.length;
   const pictured = items.filter((i) => i.image);
   const borrowed = pictured.filter((i) => reused.has(i.image)).length > pictured.length / 2;
   if (items.length && !prose && !onlyAbilities && !borrowed && pictured.length >= items.length / 2) return 'grid';
   if (borrowed) return 'list';
-  if (abilityLabels.length || items.some((i) => i.sections.length)) return 'list';
+  if (abilityLabels.length || prose) return 'list';
   return 'table';
 }
 

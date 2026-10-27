@@ -54,6 +54,7 @@ export function describeItem(item, category, site) {
     for (const a of item.abilities) if (a.name) groups.set(a.group, [...(groups.get(a.group) ?? []), a.name]);
     for (const [group, names] of groups) parts.push(sentence(`${group}: ${names.join(', ')}`));
     for (const s of item.sections) if (total() < 110 && !isPlaceholder(s.value)) parts.push(`${s.label}: ${sentence(s.value)}`);
+    if (total() < 110 && !isPlaceholder(item.body)) parts.push(sentence(item.body));
   }
   return clip(parts.join(' '));
 }

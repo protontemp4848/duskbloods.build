@@ -20,14 +20,15 @@ so every tab is read in a single request with no API keys.
 | Any other tab | A compendium category at `/c/<tab-name>`, filterable, and each row gets its own page. Layout is automatic: a **portrait grid** if most rows have an image, a **list** if there's long text or paired abilities, otherwise a sortable **table** |
 | `_anything`, hidden tabs, blank tabs | Ignored, so use them for notes and drafts |
 
-The first non-blank row of a tab is its header row. These column names have special meaning (case-insensitive):
+The first non-blank row of a tab is its header row. CamelCase headers (`BuddyInfo`) are shown with spaces (`Buddy Info`).
+These column names have special meaning (case-insensitive):
 
 | Column | Use |
 | --- | --- |
 | `Name` / `Title` | Entry title (required; rows without one are skipped). Otherwise any `… Name` column (e.g. `Character Name`), else the first column |
 | `Image` / `Picture` / `Portrait` | An image URL (`http(s)`), **or a picture placed in the row's cell** (Insert → Image → image in cell / over cells). Placed pictures are served from the site at `/media/<hash>`. Also any `… Picture`/`… Image` column, e.g. `Profile Picture` |
 | `Summary` / `Description` | One line under the name in the table; italic flavour text on the entry page |
-| `Body` / `Details` | Long text on the detail page (blank lines become paragraphs) |
+| `Body` / `Details` / `Caption` | Long text on the entry page (blank lines become paragraphs); shown in full on list pages too. Lines like `- Lv.4: Firestorm` are pulled out into a small level table, captioned by the line before them if it ends in `:`. Also any `… Body`/`… Caption` column, e.g. `BuddyCaption` |
 | `Tags` / `Type` | Comma-separated values, shown as a column and a filter dropdown (labelled with your header) |
 | `Date` | Shown on news posts; used for sorting |
 | `Link` / `Source` | "Source ↗" button |
@@ -55,7 +56,7 @@ them ("Also in …"), and any cell whose whole value is another entry's name lin
 index, breadcrumbs, search results, and matching headings on entry pages (a character's **Skills** heading uses the Skills
 badge). It's picked from the tab name automatically; set it in `_pages` to override:
 
-- `Icon`: `person` `sword` `flask` `bolt` `drop` `page` `map` `skull` `shield` `book` `star` `crown` `moon` `gem` `chart`,
+- `Icon`: `person` `people` `sword` `flask` `bolt` `drop` `page` `map` `skull` `shield` `book` `star` `crown` `moon` `gem` `chart`,
   or an emoji / one or two characters (e.g. `🦇`, `IV`). Anything else falls back to the automatic choice.
 - `Color`: `red` `amber` `green` `teal` `blue` `violet` `rose` `grey`.
 

@@ -57,7 +57,7 @@ export function search(content, q) {
     for (const item of category.items) {
       // [label, text, isName, snippet]: names (stats, ability names) outrank prose when they hold the phrase.
       const parts = [
-        ['', item.summary, false], ['', item.body, false], ...item.tags.map((t) => ['', t, true]),
+        ['', item.summary, false], ['', item.body, false], ...item.levels.map((l) => [`Lv.${l.level}`, l.text, true]), ...item.tags.map((t) => ['', t, true]),
         ...item.fields.map((f) => [f.label, f.value, true]),
         ...item.abilities.flatMap((a) => [[a.label, a.name, true, `${a.name} — ${a.text}`], [a.label, a.text, false, `${a.name} — ${a.text}`]]),
         ...item.sections.map((s) => [s.label, s.value, false]),

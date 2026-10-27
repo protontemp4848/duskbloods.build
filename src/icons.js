@@ -3,6 +3,7 @@
 
 const ICONS = {
   person: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
+  people: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
   sword: '<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6"/><path d="m16 16 4 4"/><path d="m19 21 2-2"/>',
   flask: '<path d="M10 2v7.5a2 2 0 0 1-.2.9l-5.1 10.2a1 1 0 0 0 .9 1.4h12.8a1 1 0 0 0 .9-1.4l-5.1-10.2a2 2 0 0 1-.2-.9V2"/><path d="M8.5 2h7"/><path d="M7 16h10"/>',
   bolt: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
@@ -22,13 +23,14 @@ const ICONS = {
 export const COLORS = ['red', 'amber', 'green', 'teal', 'blue', 'violet', 'rose', 'grey'];
 
 const DEFAULT_COLOR = {
-  person: 'violet', sword: 'red', flask: 'green', bolt: 'amber', drop: 'rose', page: 'blue', map: 'teal',
+  person: 'violet', people: 'amber', sword: 'red', flask: 'green', bolt: 'amber', drop: 'rose', page: 'blue', map: 'teal',
   skull: 'grey', shield: 'blue', book: 'amber', star: 'violet', crown: 'amber', moon: 'teal', gem: 'rose', chart: 'teal',
 };
 
 // Section name keywords -> icon. First match wins; matched against the lowercased name.
 const KEYWORDS = [
   [/character|bloodsworn|class|hero|hunter|npc/, 'person'],
+  [/budd|companion|ally|allies|partner|friend|summon|follower|party/, 'people'],
   [/weapon|arm(s|ament)/, 'sword'],
   [/item|consumable|tool|potion/, 'flask'],
   [/skill|abilit|move/, 'bolt'],
